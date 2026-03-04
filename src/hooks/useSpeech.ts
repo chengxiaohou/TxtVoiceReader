@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
+// Hook for text-to-speech functionality
+
 export interface SpeechState {
   isPlaying: boolean;
   isPaused: boolean;

@@ -135,9 +135,9 @@ export const SettingsPanel = React.memo(({
                 </label>
                 <div className="relative group">
                   <select
-                    value={selectedVoice?.name || ''}
+                    value={selectedVoice?.id || ''}
                     onChange={(e) => {
-                      const voice = voices.find((v) => v.name === e.target.value);
+                      const voice = voices.find((v) => v.id === e.target.value);
                       if (voice) onVoiceChange(voice);
                     }}
                     className={`w-full p-4 pr-10 border-2 rounded-2xl text-sm font-medium outline-none transition-all appearance-none cursor-pointer ${
@@ -149,7 +149,7 @@ export const SettingsPanel = React.memo(({
                     }`}
                   >
                     {voices.map((voice) => (
-                      <option key={voice.name} value={voice.name} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
+                      <option key={voice.id} value={voice.id} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
                         {voice.name}
                       </option>
                     ))}

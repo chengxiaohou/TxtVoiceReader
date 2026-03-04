@@ -162,7 +162,7 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
           </div>
         ) : (
           <ul 
-            className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
+            className="grid gap-4 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
           >
             <AnimatePresence mode='popLayout'>
               {books.map((book) => {
@@ -179,7 +179,7 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
                   >
                     <div 
                       className={`
-                        h-full flex flex-col rounded-2xl p-5 
+                        h-full flex flex-col rounded-xl p-4 
                         shadow-sm border transition-all duration-200 relative z-10
                         ${theme === 'dark' 
                           ? 'bg-slate-800 border-slate-700 hover:border-indigo-700' 
@@ -190,15 +190,15 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
                         hover:shadow-md
                       `}
                     >
-                      <div className="flex justify-between items-start mb-4">
-                        <div className={`p-2.5 rounded-xl ${
+                      <div className="flex justify-between items-start mb-3">
+                        <div className={`p-2 rounded-lg ${
                           theme === 'dark' 
                             ? 'bg-indigo-900/30 text-indigo-400' 
                             : theme === 'sepia' 
                               ? 'bg-[#5b4636]/10 text-[#5b4636]' 
                               : 'bg-indigo-50 text-indigo-600'
                         }`}>
-                          <BookOpen className="w-6 h-6" aria-hidden="true" />
+                          <BookOpen className="w-5 h-5" aria-hidden="true" />
                         </div>
                         <button
                           onClick={(e) => handleDelete(e, book.id, book.title)}
@@ -208,7 +208,7 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
                             }
                           }}
                           className={`
-                            p-2 rounded-lg transition-colors focus:outline-none focus:ring-2 
+                            p-1.5 rounded-md transition-colors focus:outline-none focus:ring-2 
                             opacity-0 group-hover:opacity-100 focus:opacity-100 relative z-20
                             ${theme === 'sepia' 
                               ? 'text-[#5b4636]/50 hover:text-red-700 hover:bg-red-700/10 focus:ring-red-700' 
@@ -222,7 +222,7 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
                         </button>
                       </div>
                       
-                      <h3 className={`text-lg font-bold mb-2 line-clamp-2 leading-tight ${
+                      <h3 className={`text-base font-bold mb-2 line-clamp-2 leading-tight ${
                         theme === 'dark' ? 'text-white' : theme === 'sepia' ? 'text-[#5b4636]' : 'text-slate-900'
                       }`} title={book.title}>
                         <button 
@@ -235,7 +235,7 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
                         </button>
                       </h3>
                       
-                      <div className="mt-auto pt-4">
+                      <div className="mt-auto pt-3">
                         <div className={`flex items-center justify-between text-xs mb-2 ${
                           theme === 'dark' ? 'text-slate-400' : theme === 'sepia' ? 'text-[#5b4636]/70' : 'text-slate-500'
                         }`}>
