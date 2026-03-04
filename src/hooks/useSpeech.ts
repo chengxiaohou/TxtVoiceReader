@@ -1,27 +1,17 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { sherpaOnnxService } from '../services/tts/SherpaOnnxService';
 
 export interface SpeechState {
   isPlaying: boolean;
   isPaused: boolean;
-  voices: (SpeechSynthesisVoice | { id: string, name: string, lang: string, localService: boolean })[];
-  selectedVoice: any | null;
+  voices: SpeechSynthesisVoice[];
+  selectedVoice: SpeechSynthesisVoice | null;
   rate: number;
   pitch: number;
   volume: number;
   progress: number; // 0 to 1 (overall)
   currentChunkIndex: number;
   totalChunks: number;
-  isModelLoading: boolean;
-  modelLoadingProgress: number;
 }
-
-const SHERPA_VOICE = {
-  id: 'sherpa-onnx-piper-zh',
-  name: 'Piper 高质量 (离线)',
-  lang: 'zh-CN',
-  localService: true,
-};
 
 export const useSpeech = (
   text: string, 
@@ -39,8 +29,6 @@ export const useSpeech = (
     progress: 0,
     currentChunkIndex: initialIndex,
     totalChunks: 0,
-    isModelLoading: false,
-    modelLoadingProgress: 0,
   });
 
   const chunksRef = useRef<string[]>([]);
@@ -93,12 +81,11 @@ export const useSpeech = (
     const synth = synthRef.current;
     const loadVoices = () => {
       const systemVoices = synth.getVoices();
-      const allVoices = [SHERPA_VOICE, ...systemVoices];
       
       setState((prev) => ({
         ...prev,
-        voices: allVoices,
-        selectedVoice: prev.selectedVoice || SHERPA_VOICE || systemVoices.find((v) => v.default) || systemVoices[0] || null,
+        voices: systemVoices,
+        selectedVoice: prev.selectedVoice || systemVoices.find((v) => v.default) || systemVoices[0] || null,
       }));
     };
 
@@ -110,13 +97,6 @@ export const useSpeech = (
     };
   }, []);
 
-  // Listen to Sherpa model loading progress
-  useEffect(() => {
-    sherpaOnnxService.onProgress((percent) => {
-      setState(prev => ({ ...prev, modelLoadingProgress: percent }));
-    });
-  }, []);
-
   const speakChunk = useCallback(async (index: number) => {
     const synth = synthRef.current;
     if (index >= chunksRef.current.length) {
@@ -126,46 +106,8 @@ export const useSpeech = (
 
     // Cancel any ongoing speech
     synth.cancel();
-    sherpaOnnxService.stop();
 
     const chunk = chunksRef.current[index];
-    const isSherpa = paramsRef.current.selectedVoice?.id === SHERPA_VOICE.id;
-
-    if (isSherpa) {
-      try {
-        if (!sherpaOnnxService.isInitialized) {
-          setState(prev => ({ ...prev, isModelLoading: true }));
-          try {
-            await sherpaOnnxService.init();
-          } finally {
-            setState(prev => ({ ...prev, isModelLoading: false }));
-          }
-        }
-        
-        setState(prev => ({ ...prev, isPlaying: true, isPaused: false }));
-        await sherpaOnnxService.speak(chunk, paramsRef.current.rate);
-        
-        // Handle next chunk
-        const nextIndex = index + 1;
-        if (nextIndex < chunksRef.current.length) {
-          setState(prev => ({ 
-            ...prev, 
-            currentChunkIndex: nextIndex,
-            progress: nextIndex / chunksRef.current.length 
-          }));
-          if (onProgressUpdate) onProgressUpdate(nextIndex, chunksRef.current.length);
-          speakChunk(nextIndex);
-        } else {
-          setState(prev => ({ ...prev, isPlaying: false, isPaused: false, progress: 1 }));
-          if (onProgressUpdate) onProgressUpdate(chunksRef.current.length, chunksRef.current.length);
-        }
-      } catch (error) {
-        console.error("Sherpa-ONNX error", error);
-        setState(prev => ({ ...prev, isPlaying: false }));
-      }
-      return;
-    }
-
     const utterance = new SpeechSynthesisUtterance(chunk);
     utteranceRef.current = utterance;
 
@@ -204,27 +146,21 @@ export const useSpeech = (
 
     utterance.onerror = (e) => {
       console.error("Speech error", e);
-      // Don't stop state immediately on error as it might be a cancel event
-      // But if it is a real error, we might want to stop.
-      // For now, we assume cancel is intentional.
     };
 
     synth.speak(utterance);
-  }, [onProgressUpdate]); // Empty dependency array because we use refs!
+  }, [onProgressUpdate]);
 
   // Debounced restart when parameters change
   useEffect(() => {
     // Only restart if playing and NOT paused
     if (state.isPlaying && !state.isPaused) {
       const timer = setTimeout(() => {
-        // Restart current chunk with new parameters
-        // We must use the current index from state
-        // Since this effect runs on state change, state.currentChunkIndex is fresh
         speakChunk(state.currentChunkIndex);
       }, 500); // 500ms debounce
       return () => clearTimeout(timer);
     }
-  }, [state.rate, state.pitch, state.volume, state.selectedVoice]); // Only trigger on these changes
+  }, [state.rate, state.pitch, state.volume, state.selectedVoice]);
 
   const speak = useCallback(() => {
     const synth = synthRef.current;
@@ -246,7 +182,6 @@ export const useSpeech = (
     const synth = synthRef.current;
     if (state.isPlaying) {
       synth.pause();
-      sherpaOnnxService.stop();
       setState((prev) => ({ ...prev, isPlaying: false, isPaused: true }));
       // Notify pause progress
       if (onProgressUpdate && chunksRef.current.length > 0) {
@@ -270,7 +205,6 @@ export const useSpeech = (
       const nextIndex = state.currentChunkIndex + 1;
       setState(prev => ({ ...prev, currentChunkIndex: nextIndex, progress: nextIndex / chunksRef.current.length }));
       
-      // Notify progress
       if (onProgressUpdate) {
         onProgressUpdate(nextIndex, chunksRef.current.length);
       }
@@ -286,7 +220,6 @@ export const useSpeech = (
       const prevIndex = state.currentChunkIndex - 1;
       setState(prev => ({ ...prev, currentChunkIndex: prevIndex, progress: prevIndex / chunksRef.current.length }));
       
-      // Notify progress
       if (onProgressUpdate) {
         onProgressUpdate(prevIndex, chunksRef.current.length);
       }

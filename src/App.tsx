@@ -3,7 +3,7 @@ import { Reader } from './components/Reader';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Library } from './components/Library';
 import { useSpeech } from './hooks/useSpeech';
-import { Settings, Play, Pause, ChevronLeft, BookOpen } from 'lucide-react';
+import { Settings, Play, Pause, ChevronLeft, BookOpen, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { addBook, updateProgress, Book } from './utils/db';
 import { translations, Language } from './i18n';
@@ -52,6 +52,8 @@ export default function App() {
     currentChunkIndex,
     totalChunks,
     jumpTo,
+    isModelLoading,
+    modelLoadingProgress,
   } = useSpeech(
     currentBook?.content || '', 
     currentBook?.progress || 0,
@@ -244,6 +246,37 @@ export default function App() {
           </div>
         </motion.div>
       )}
+
+      {/* Model Loading Overlay */}
+      <AnimatePresence>
+        {isModelLoading && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className={`fixed bottom-24 left-1/2 -translate-x-1/2 px-6 py-4 rounded-2xl shadow-2xl z-40 flex items-center gap-4 ${
+              theme === 'dark'
+                ? 'bg-slate-800 text-white border border-slate-700'
+                : theme === 'sepia'
+                  ? 'bg-[#eaddc5] text-[#5b4636] border border-[#d4c5b0]'
+                  : 'bg-white text-slate-900 border border-slate-200'
+            }`}
+          >
+            <Loader2 className="w-6 h-6 animate-spin text-indigo-500" />
+            <div className="flex flex-col">
+              <span className="font-bold text-sm">
+                {language === 'zh' ? '正在加载语音模型...' : 'Loading voice model...'}
+              </span>
+              <div className="w-48 h-1.5 bg-black/10 dark:bg-white/10 rounded-full mt-2 overflow-hidden">
+                <div 
+                  className="h-full bg-indigo-500 transition-all duration-300 ease-out rounded-full"
+                  style={{ width: `${Math.max(5, modelLoadingProgress)}%` }}
+                />
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Jump Modal */}
       <AnimatePresence>

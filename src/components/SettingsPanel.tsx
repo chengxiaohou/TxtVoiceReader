@@ -6,9 +6,9 @@ import { translations, Language } from '../i18n';
 interface SettingsPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  voices: SpeechSynthesisVoice[];
-  selectedVoice: SpeechSynthesisVoice | null;
-  onVoiceChange: (voice: SpeechSynthesisVoice) => void;
+  voices: any[];
+  selectedVoice: any | null;
+  onVoiceChange: (voice: any) => void;
   rate: number;
   onRateChange: (rate: number) => void;
   pitch: number;

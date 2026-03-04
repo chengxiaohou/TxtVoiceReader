@@ -2,7 +2,7 @@ export interface TTSVoice {
   id: string;
   name: string;
   lang: string;
-  provider: 'system' | 'sherpa-onnx';
+  provider: 'system';
 }
 
 export interface TTSOptions {
