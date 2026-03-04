@@ -1,0 +1,5 @@
+{
+  "name": "TxtVoiceReader",
+  "description": "A responsive TXT file reader with adjustable text-to-speech capabilities.",
+  "requestFramePermissions": []
+}
