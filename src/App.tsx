@@ -136,8 +136,9 @@ export default function App() {
           )}
           <div className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 opacity-80" />
-            <h1 className="font-semibold text-lg truncate max-w-[150px] sm:max-w-md">
-              {currentBook?.title || 'TxtVoiceReader'}
+            <h1 className="font-semibold text-lg truncate max-w-[150px] sm:max-w-md flex items-baseline gap-2">
+              <span>{currentBook?.title || '随身听'}</span>
+              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.0</span>}
             </h1>
           </div>
         </div>

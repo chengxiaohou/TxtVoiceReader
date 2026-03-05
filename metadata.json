@@ -1,5 +1,5 @@
 {
-  "name": "TxtVoiceReader",
+  "name": "随身听",
   "description": "A responsive TXT file reader with adjustable text-to-speech capabilities.",
   "requestFramePermissions": []
 }
