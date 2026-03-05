@@ -14,6 +14,7 @@ interface LibraryProps {
 export const Library = React.memo(({ language, theme, onSelectBook, onImportBook }: LibraryProps) => {
   const [books, setBooks] = useState<Book[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isImporting, setIsImporting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   
   const t = translations[language];
@@ -59,16 +60,34 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
     }
   };
 
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
       if (file.type === 'text/plain' || file.name.endsWith('.txt')) {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const content = e.target?.result as string;
-          onImportBook(content, file.name);
-        };
-        reader.readAsText(file);
+        setIsImporting(true);
+        
+        try {
+          const arrayBuffer = await file.arrayBuffer();
+          
+          // Try UTF-8 first
+          let content = '';
+          try {
+            const utf8Decoder = new TextDecoder('utf-8', { fatal: true });
+            content = utf8Decoder.decode(arrayBuffer);
+          } catch (e) {
+            // Fallback to GBK for Chinese compatibility
+            console.log("UTF-8 decoding failed, trying GBK...");
+            const gbkDecoder = new TextDecoder('gbk');
+            content = gbkDecoder.decode(arrayBuffer);
+          }
+          
+          await onImportBook(content, file.name);
+        } catch (error) {
+          console.error("File import failed:", error);
+          alert('Failed to read file');
+        } finally {
+          setIsImporting(false);
+        }
       } else {
         alert('Please upload a valid .txt file');
       }
@@ -95,9 +114,11 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
         
         <button
           onClick={() => fileInputRef.current?.click()}
+          disabled={isImporting}
           className={`
             flex items-center justify-center gap-2 px-6 py-3 rounded-full font-medium transition-all
             shadow-md hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-offset-2
+            ${isImporting ? 'opacity-50 cursor-not-allowed' : ''}
             ${theme === 'sepia' 
               ? 'bg-[#5b4636] text-[#f4ecd8] hover:bg-[#4a382a] focus:ring-[#5b4636]' 
               : 'bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500'
@@ -106,8 +127,12 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
           `}
           aria-label={t.addBook}
         >
-          <Plus className="w-5 h-5" />
-          <span>{t.addBook}</span>
+          {isImporting ? (
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-current"></div>
+          ) : (
+            <Plus className="w-5 h-5" />
+          )}
+          <span>{isImporting ? t.importing : t.addBook}</span>
         </button>
         <input 
           ref={fileInputRef}
@@ -120,11 +145,12 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
       </header>
 
       <section aria-label={t.library}>
-        {isLoading ? (
-          <div className="flex justify-center py-20" aria-label={t.loadingLibrary}>
+        {(isLoading || isImporting) ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4" aria-label={t.loadingLibrary}>
             <div className={`animate-spin rounded-full h-10 w-10 border-b-2 ${
               theme === 'sepia' ? 'border-[#5b4636]' : 'border-indigo-600'
             }`}></div>
+            {isImporting && <p className="text-sm font-medium opacity-60 animate-pulse">{t.processingFile}</p>}
           </div>
         ) : books.length === 0 ? (
           <div className={`text-center py-20 px-4 rounded-3xl border border-dashed ${

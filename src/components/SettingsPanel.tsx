@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Settings, X, Volume2, Mic, Globe, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { translations, Language } from '../i18n';
@@ -6,9 +6,9 @@ import { translations, Language } from '../i18n';
 interface SettingsPanelProps {
   isOpen: boolean;
   onClose: () => void;
-  voices: any[];
-  selectedVoice: any | null;
-  onVoiceChange: (voice: any) => void;
+  voices: SpeechSynthesisVoice[];
+  selectedVoice: SpeechSynthesisVoice | null;
+  onVoiceChange: (voice: SpeechSynthesisVoice) => void;
   rate: number;
   onRateChange: (rate: number) => void;
   pitch: number;
@@ -43,6 +43,33 @@ export const SettingsPanel = React.memo(({
   onLanguageChange,
 }: SettingsPanelProps) => {
   const t = translations[language];
+
+  const getLanguageName = (langCode: string) => {
+    try {
+      const displayNames = new Intl.DisplayNames([language], { type: 'language' });
+      const name = displayNames.of(langCode.split('-')[0]);
+      return name ? `${name} (${langCode})` : langCode;
+    } catch (e) {
+      return langCode;
+    }
+  };
+
+  const groupedVoices = useMemo(() => {
+    const groups: Record<string, SpeechSynthesisVoice[]> = {};
+    voices.forEach(voice => {
+      const lang = voice.lang;
+      if (!groups[lang]) groups[lang] = [];
+      groups[lang].push(voice);
+    });
+    // Sort languages: current app language first, then alphabetical
+    return Object.entries(groups).sort(([a], [b]) => {
+      const aIsCurrent = a.startsWith(language);
+      const bIsCurrent = b.startsWith(language);
+      if (aIsCurrent && !bIsCurrent) return -1;
+      if (!aIsCurrent && bIsCurrent) return 1;
+      return a.localeCompare(b);
+    });
+  }, [voices, language]);
 
   return (
     <AnimatePresence>
@@ -148,10 +175,14 @@ export const SettingsPanel = React.memo(({
                           : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-600/5'
                     }`}
                   >
-                    {voices.map((voice) => (
-                      <option key={voice.voiceURI} value={voice.voiceURI} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
-                        {voice.name}
-                      </option>
+                    {groupedVoices.map(([lang, langVoices]) => (
+                      <optgroup key={lang} label={getLanguageName(lang)} className={theme === 'dark' ? 'bg-slate-950 text-slate-400' : ''}>
+                        {langVoices.map((voice) => (
+                          <option key={voice.voiceURI} value={voice.voiceURI} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
+                            {voice.name}
+                          </option>
+                        ))}
+                      </optgroup>
                     ))}
                   </select>
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">

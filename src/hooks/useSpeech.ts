@@ -83,6 +83,7 @@ export const useSpeech = (
     const synth = synthRef.current;
     const loadVoices = () => {
       const systemVoices = synth.getVoices();
+      if (systemVoices.length === 0) return; // Wait for voices to load
       
       setState((prev) => ({
         ...prev,
@@ -92,9 +93,18 @@ export const useSpeech = (
     };
 
     loadVoices();
+    // Some browsers need a little nudge or multiple calls to getVoices()
+    const interval = setInterval(() => {
+      if (synth.getVoices().length > 0) {
+        loadVoices();
+        clearInterval(interval);
+      }
+    }, 100);
+
     synth.addEventListener('voiceschanged', loadVoices);
     
     return () => {
+      clearInterval(interval);
       synth.removeEventListener('voiceschanged', loadVoices);
     };
   }, []);

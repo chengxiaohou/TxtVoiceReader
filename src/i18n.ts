@@ -47,6 +47,8 @@ export const translations = {
     jump: 'Jump',
     go: 'Go',
     enterPercentage: 'Enter %',
+    importing: 'Importing...',
+    processingFile: 'Processing large file...',
   },
   zh: {
     library: '书架',
@@ -81,6 +83,7 @@ export const translations = {
     play: '播放',
     pause: '暂停',
     stop: '停止',
+    status: '状态',
     skipForward: '向后跳转',
     skipBackward: '向前跳转',
     saveError: '保存书籍失败。存储空间可能已满。',
@@ -94,5 +97,7 @@ export const translations = {
     jump: '跳转',
     go: '前往',
     enterPercentage: '输入百分比',
+    importing: '正在导入...',
+    processingFile: '正在处理大文件，请稍候...',
   }
 };
