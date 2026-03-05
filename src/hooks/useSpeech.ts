@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
-// Hook for text-to-speech functionality
+export type Voice = SpeechSynthesisVoice;
 
 export interface SpeechState {
   isPlaying: boolean;
   isPaused: boolean;
-  voices: SpeechSynthesisVoice[];
-  selectedVoice: SpeechSynthesisVoice | null;
+  voices: Voice[];
+  selectedVoice: Voice | null;
   rate: number;
   pitch: number;
   volume: number;
@@ -42,7 +42,7 @@ export const useSpeech = (
     rate: 1,
     pitch: 1,
     volume: 1,
-    selectedVoice: null as SpeechSynthesisVoice | null,
+    selectedVoice: null as Voice | null,
   });
 
   // Sync refs with state
@@ -99,6 +99,11 @@ export const useSpeech = (
     };
   }, []);
 
+  // Handle voice change
+  const setVoice = useCallback((voice: Voice) => {
+    setState((prev) => ({ ...prev, selectedVoice: voice }));
+  }, []);
+
   const speakChunk = useCallback(async (index: number) => {
     const synth = synthRef.current;
     if (index >= chunksRef.current.length) {
@@ -110,12 +115,14 @@ export const useSpeech = (
     synth.cancel();
 
     const chunk = chunksRef.current[index];
+    const currentVoice = paramsRef.current.selectedVoice;
+
+    // Use Web Speech API
     const utterance = new SpeechSynthesisUtterance(chunk);
     utteranceRef.current = utterance;
 
-    // Use refs for latest parameters
-    if (paramsRef.current.selectedVoice) {
-      utterance.voice = paramsRef.current.selectedVoice;
+    if (currentVoice) {
+      utterance.voice = currentVoice;
     }
     utterance.rate = paramsRef.current.rate;
     utterance.pitch = paramsRef.current.pitch;
@@ -167,6 +174,7 @@ export const useSpeech = (
   const speak = useCallback(() => {
     const synth = synthRef.current;
     if (state.isPaused) {
+      // Resume
       synth.resume();
       setState((prev) => ({ ...prev, isPlaying: true, isPaused: false }));
       return;
@@ -231,10 +239,6 @@ export const useSpeech = (
       }
     }
   }, [state.currentChunkIndex, state.isPlaying, speakChunk, onProgressUpdate]);
-
-  const setVoice = useCallback((voice: SpeechSynthesisVoice) => {
-    setState((prev) => ({ ...prev, selectedVoice: voice }));
-  }, []);
 
   const setRate = useCallback((rate: number) => {
     setState((prev) => ({ ...prev, rate }));

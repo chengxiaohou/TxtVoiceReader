@@ -52,6 +52,7 @@ export default function App() {
     currentChunkIndex,
     totalChunks,
     jumpTo,
+    status,
   } = useSpeech(
     currentBook?.content || '', 
     currentBook?.progress || 0,
@@ -353,6 +354,7 @@ export default function App() {
         onThemeChange={setTheme}
         language={language}
         onLanguageChange={setLanguage}
+        status={status}
       />
     </div>
   );
