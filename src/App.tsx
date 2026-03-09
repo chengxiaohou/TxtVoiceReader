@@ -5,11 +5,12 @@ import { Library } from './components/Library';
 import { useSpeech } from './hooks/useSpeech';
 import { Settings, Play, Pause, ChevronLeft, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { addBook, updateProgress, Book } from './utils/db';
+import { addBook, updateProgress, getBook, Book } from './utils/db';
 import { translations, Language } from './i18n';
 
 type Theme = 'light' | 'dark' | 'sepia';
 type View = 'library' | 'reader';
+const LAST_READING_BOOK_KEY = 'txt-voice-reader-last-reading-book-id-v1';
 
 export default function App() {
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
@@ -26,6 +27,33 @@ export default function App() {
   const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
 
   const t = translations[language];
+
+  const persistLastReadingBook = useCallback((bookId: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(LAST_READING_BOOK_KEY, bookId);
+    } catch {
+      // no-op
+    }
+  }, []);
+
+  const clearLastReadingBook = useCallback(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.removeItem(LAST_READING_BOOK_KEY);
+    } catch {
+      // no-op
+    }
+  }, []);
+
+  const getLastReadingBookId = useCallback(() => {
+    if (typeof window === 'undefined') return '';
+    try {
+      return window.localStorage.getItem(LAST_READING_BOOK_KEY) || '';
+    } catch {
+      return '';
+    }
+  }, []);
 
   // Callback to save progress to IndexedDB
   const handleProgressUpdate = useCallback((index: number, total: number) => {
@@ -71,6 +99,7 @@ export default function App() {
       window.setTimeout(() => {
         setCurrentBook(newBook);
         setView('reader');
+        persistLastReadingBook(newBook.id);
       }, 0);
     } catch (error) {
       console.error("Failed to import book:", error);
@@ -86,6 +115,7 @@ export default function App() {
     window.setTimeout(() => {
       setCurrentBook(book);
       setView('reader');
+      persistLastReadingBook(book.id);
     }, 0);
   };
 
@@ -97,6 +127,7 @@ export default function App() {
     setCurrentBook(null);
     setView('library');
     setIsOpeningBook(false);
+    clearLastReadingBook();
   };
 
   const handleReaderReady = useCallback(() => {
@@ -136,6 +167,45 @@ export default function App() {
   };
 
   // Apply theme to body for overscroll colors
+  useEffect(() => {
+    let cancelled = false;
+
+    const restoreLastReadingSession = async () => {
+      const bookId = getLastReadingBookId();
+      if (!bookId) return;
+
+      try {
+        openingStartedAtRef.current = Date.now();
+        setIsOpeningBook(true);
+        const restoredBook = await getBook(bookId);
+        if (cancelled) return;
+        if (!restoredBook) {
+          clearLastReadingBook();
+          setIsOpeningBook(false);
+          return;
+        }
+
+        setCurrentBook(restoredBook);
+        setView('reader');
+      } catch (error) {
+        console.error('Failed to restore last reading session:', error);
+        setIsOpeningBook(false);
+      }
+    };
+
+    restoreLastReadingSession();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clearLastReadingBook, getLastReadingBookId]);
+
+  useEffect(() => {
+    if (view === 'reader' && currentBook) {
+      persistLastReadingBook(currentBook.id);
+    }
+  }, [view, currentBook, persistLastReadingBook]);
+
   useEffect(() => {
     const body = document.body;
     const html = document.documentElement;
