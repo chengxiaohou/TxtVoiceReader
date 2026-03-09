@@ -76,6 +76,9 @@ export default function App() {
   };
 
   const handleBack = () => {
+    if (currentBook && totalChunks > 0) {
+      handleProgressUpdate(currentChunkIndex, totalChunks);
+    }
     stop();
     setCurrentBook(null);
     setView('library');
@@ -114,6 +117,31 @@ export default function App() {
     }
   }, [theme]);
 
+  // Flush latest highlighted chunk progress when app is backgrounded/closed.
+  useEffect(() => {
+    if (!currentBook || totalChunks <= 0) return;
+
+    const flushProgress = () => {
+      handleProgressUpdate(currentChunkIndex, totalChunks);
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushProgress();
+      }
+    };
+
+    window.addEventListener('pagehide', flushProgress);
+    window.addEventListener('beforeunload', flushProgress);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+
+    return () => {
+      window.removeEventListener('pagehide', flushProgress);
+      window.removeEventListener('beforeunload', flushProgress);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+    };
+  }, [currentBook, currentChunkIndex, totalChunks, handleProgressUpdate]);
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
@@ -138,7 +166,7 @@ export default function App() {
             <BookOpen className="w-5 h-5 opacity-80" />
             <h1 className="font-semibold text-lg truncate max-w-[150px] sm:max-w-md flex items-baseline gap-2">
               <span>{currentBook?.title || '随身听'}</span>
-              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.1</span>}
+              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.4</span>}
             </h1>
           </div>
         </div>
@@ -239,7 +267,7 @@ export default function App() {
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                   theme === 'dark' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-600 text-white'
                 }`}>
-                  {Math.round(progress * 100)}%
+                  {(progress * 100).toFixed(1)}%
                 </span>
               </button>
             </div>

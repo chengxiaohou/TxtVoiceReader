@@ -55,6 +55,13 @@ export const useSpeech = (
     };
   }, [state.rate, state.pitch, state.volume, state.selectedVoice]);
 
+  // Persist progress strictly by highlighted chunk index.
+  useEffect(() => {
+    if (onProgressUpdate && chunksRef.current.length > 0) {
+      onProgressUpdate(state.currentChunkIndex, chunksRef.current.length);
+    }
+  }, [state.currentChunkIndex, onProgressUpdate]);
+
   // Split text into chunks when text changes
   useEffect(() => {
     if (!text) {
@@ -148,11 +155,6 @@ export const useSpeech = (
           progress: nextIndex / chunksRef.current.length 
         }));
         
-        // Notify parent about progress update
-        if (onProgressUpdate) {
-          onProgressUpdate(nextIndex, chunksRef.current.length);
-        }
-        
         speakChunk(nextIndex);
       } else {
         setState(prev => ({ ...prev, isPlaying: false, isPaused: false, progress: 1 }));
@@ -203,52 +205,36 @@ export const useSpeech = (
     if (state.isPlaying) {
       synth.pause();
       setState((prev) => ({ ...prev, isPlaying: false, isPaused: true }));
-      // Notify pause progress
-      if (onProgressUpdate && chunksRef.current.length > 0) {
-        onProgressUpdate(state.currentChunkIndex, chunksRef.current.length);
-      }
     }
-  }, [state.isPlaying, state.currentChunkIndex, onProgressUpdate]);
+  }, [state.isPlaying]);
 
   const stop = useCallback(() => {
     const synth = synthRef.current;
     synth.cancel();
     setState((prev) => ({ ...prev, isPlaying: false, isPaused: false }));
-    // Notify stop progress
-    if (onProgressUpdate && chunksRef.current.length > 0) {
-      onProgressUpdate(state.currentChunkIndex, chunksRef.current.length);
-    }
-  }, [state.currentChunkIndex, onProgressUpdate]);
+  }, []);
 
   const skipForward = useCallback(() => {
     if (state.currentChunkIndex < chunksRef.current.length - 1) {
       const nextIndex = state.currentChunkIndex + 1;
       setState(prev => ({ ...prev, currentChunkIndex: nextIndex, progress: nextIndex / chunksRef.current.length }));
       
-      if (onProgressUpdate) {
-        onProgressUpdate(nextIndex, chunksRef.current.length);
-      }
-
       if (state.isPlaying) {
         speakChunk(nextIndex);
       }
     }
-  }, [state.currentChunkIndex, state.isPlaying, speakChunk, onProgressUpdate]);
+  }, [state.currentChunkIndex, state.isPlaying, speakChunk]);
 
   const skipBackward = useCallback(() => {
     if (state.currentChunkIndex > 0) {
       const prevIndex = state.currentChunkIndex - 1;
       setState(prev => ({ ...prev, currentChunkIndex: prevIndex, progress: prevIndex / chunksRef.current.length }));
       
-      if (onProgressUpdate) {
-        onProgressUpdate(prevIndex, chunksRef.current.length);
-      }
-
       if (state.isPlaying) {
         speakChunk(prevIndex);
       }
     }
-  }, [state.currentChunkIndex, state.isPlaying, speakChunk, onProgressUpdate]);
+  }, [state.currentChunkIndex, state.isPlaying, speakChunk]);
 
   const setRate = useCallback((rate: number) => {
     setState((prev) => ({ ...prev, rate }));
@@ -270,15 +256,11 @@ export const useSpeech = (
         progress: index / chunksRef.current.length 
       }));
       
-      if (onProgressUpdate) {
-        onProgressUpdate(index, chunksRef.current.length);
-      }
-
       if (state.isPlaying) {
         speakChunk(index);
       }
     }
-  }, [state.isPlaying, speakChunk, onProgressUpdate]);
+  }, [state.isPlaying, speakChunk]);
 
   // Cleanup
   useEffect(() => {

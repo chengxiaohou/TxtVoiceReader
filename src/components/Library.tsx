@@ -192,7 +192,7 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
           >
             <AnimatePresence mode='popLayout'>
               {books.map((book) => {
-                const progressPercent = book.totalChunks > 0 ? Math.round((book.progress / book.totalChunks) * 100) : 0;
+                const progressPercent = book.totalChunks > 0 ? Number(((book.progress / book.totalChunks) * 100).toFixed(1)) : 0;
                 
                 return (
                   <motion.li
