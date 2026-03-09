@@ -5,9 +5,10 @@ interface ChunkProps {
   index: number;
   isActive: boolean;
   onClick: (index: number) => void;
+  onActiveReady?: () => void;
 }
 
-const Chunk = memo(({ chunk, index, isActive, onClick }: ChunkProps) => {
+const Chunk = memo(({ chunk, index, isActive, onClick, onActiveReady }: ChunkProps) => {
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
@@ -16,8 +17,9 @@ const Chunk = memo(({ chunk, index, isActive, onClick }: ChunkProps) => {
         behavior: 'smooth',
         block: 'center',
       });
+      onActiveReady?.();
     }
-  }, [isActive]);
+  }, [isActive, onActiveReady]);
 
   return (
     <span
@@ -46,6 +48,7 @@ interface ReaderProps {
   theme: 'light' | 'dark' | 'sepia';
   currentChunkIndex: number;
   onChunkClick?: (index: number) => void;
+  onActiveChunkReady?: () => void;
 }
 
 export const Reader: React.FC<ReaderProps> = ({ 
@@ -53,7 +56,8 @@ export const Reader: React.FC<ReaderProps> = ({
   fontSize, 
   theme, 
   currentChunkIndex,
-  onChunkClick 
+  onChunkClick,
+  onActiveChunkReady,
 }) => {
   const chunks = useMemo(() => {
     if (!content) return [];
@@ -84,6 +88,7 @@ export const Reader: React.FC<ReaderProps> = ({
             chunk={chunk}
             isActive={index === currentChunkIndex}
             onClick={onChunkClick || (() => {})}
+            onActiveReady={onActiveChunkReady}
           />
         ))}
       </div>

@@ -192,7 +192,8 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
           >
             <AnimatePresence mode='popLayout'>
               {books.map((book) => {
-                const progressPercent = book.totalChunks > 0 ? Number(((book.progress / book.totalChunks) * 100).toFixed(1)) : 0;
+                const progressPercent = book.totalChunks > 0 ? (book.progress / book.totalChunks) * 100 : 0;
+                const progressText = progressPercent.toFixed(1);
                 
                 return (
                   <motion.li
@@ -269,7 +270,7 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
                             <Clock className="w-3 h-3 mr-1" aria-hidden="true" />
                             <span>{formatDate(book.lastReadAt)}</span>
                           </div>
-                          <span aria-label={`${progressPercent}% ${t.completed}`}>{progressPercent}%</span>
+                          <span aria-label={`${progressText}% ${t.completed}`}>{progressText}%</span>
                         </div>
 
                         <div 
@@ -277,7 +278,7 @@ export const Library = React.memo(({ language, theme, onSelectBook, onImportBook
                             theme === 'dark' ? 'bg-slate-700' : theme === 'sepia' ? 'bg-[#5b4636]/10' : 'bg-slate-100'
                           }`}
                           role="progressbar"
-                          aria-valuenow={progressPercent}
+                          aria-valuenow={Number(progressText)}
                           aria-valuemin={0}
                           aria-valuemax={100}
                         >

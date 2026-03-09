@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Reader } from './components/Reader';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Library } from './components/Library';
@@ -14,6 +14,8 @@ type View = 'library' | 'reader';
 export default function App() {
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
   const [view, setView] = useState<View>('library');
+  const [isOpeningBook, setIsOpeningBook] = useState(false);
+  const openingStartedAtRef = useRef<number>(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [jumpValue, setJumpValue] = useState('');
   const [fontSize, setFontSize] = useState(18);
@@ -61,7 +63,9 @@ export default function App() {
 
   const handleImportBook = async (text: string, name: string) => {
     try {
+      openingStartedAtRef.current = Date.now();
       const newBook = await addBook(name, text);
+      setIsOpeningBook(true);
       setCurrentBook(newBook);
       setView('reader');
     } catch (error) {
@@ -71,6 +75,8 @@ export default function App() {
   };
 
   const handleSelectBook = (book: Book) => {
+    openingStartedAtRef.current = Date.now();
+    setIsOpeningBook(true);
     setCurrentBook(book);
     setView('reader');
   };
@@ -82,7 +88,17 @@ export default function App() {
     stop();
     setCurrentBook(null);
     setView('library');
+    setIsOpeningBook(false);
   };
+
+  const handleReaderReady = useCallback(() => {
+    const minVisibleMs = 450;
+    const elapsed = Date.now() - openingStartedAtRef.current;
+    const remaining = Math.max(0, minVisibleMs - elapsed);
+    window.setTimeout(() => {
+      setIsOpeningBook(false);
+    }, remaining);
+  }, []);
 
   const handleJump = (e: any) => {
     e.preventDefault();
@@ -166,7 +182,7 @@ export default function App() {
             <BookOpen className="w-5 h-5 opacity-80" />
             <h1 className="font-semibold text-lg truncate max-w-[150px] sm:max-w-md flex items-baseline gap-2">
               <span>{currentBook?.title || '随身听'}</span>
-              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.4</span>}
+              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.6</span>}
             </h1>
           </div>
         </div>
@@ -203,15 +219,33 @@ export default function App() {
         {view === 'library' ? (
           <Library language={language} theme={theme} onSelectBook={handleSelectBook} onImportBook={handleImportBook} />
         ) : (
-          <Reader 
-            content={currentBook?.content || ''} 
-            fontSize={fontSize} 
-            theme={theme} 
-            currentChunkIndex={currentChunkIndex}
-            onChunkClick={jumpTo}
-          />
+          <div className="relative min-h-[calc(100vh-12rem)]">
+            <Reader 
+              content={currentBook?.content || ''} 
+              fontSize={fontSize} 
+              theme={theme} 
+              currentChunkIndex={currentChunkIndex}
+              onChunkClick={jumpTo}
+              onActiveChunkReady={handleReaderReady}
+            />
+          </div>
         )}
       </main>
+
+      {isOpeningBook && view === 'reader' && (
+        <div className={`fixed inset-0 z-[100] flex flex-col items-center justify-center gap-3 ${
+          theme === 'dark'
+            ? 'bg-slate-950/80 text-slate-100'
+            : theme === 'sepia'
+              ? 'bg-[#f4ecd8]/90 text-[#5b4636]'
+              : 'bg-white/90 text-slate-800'
+        }`}>
+          <div className={`h-10 w-10 animate-spin rounded-full border-2 border-transparent ${
+            theme === 'sepia' ? 'border-t-[#5b4636]' : 'border-t-indigo-500'
+          }`} />
+          <p className="text-sm font-medium opacity-85">正在打开书籍并定位进度...</p>
+        </div>
+      )}
 
       {/* Floating Controls (Only when reading) */}
       {view === 'reader' && (
