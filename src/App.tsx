@@ -64,21 +64,28 @@ export default function App() {
   const handleImportBook = async (text: string, name: string) => {
     try {
       openingStartedAtRef.current = Date.now();
-      const newBook = await addBook(name, text);
       setIsOpeningBook(true);
-      setCurrentBook(newBook);
-      setView('reader');
+      const newBook = await addBook(name, text);
+      // Let loading overlay paint first, then switch to reader.
+      window.setTimeout(() => {
+        setCurrentBook(newBook);
+        setView('reader');
+      }, 0);
     } catch (error) {
       console.error("Failed to import book:", error);
       alert(t.saveError);
+      setIsOpeningBook(false);
     }
   };
 
   const handleSelectBook = (book: Book) => {
     openingStartedAtRef.current = Date.now();
     setIsOpeningBook(true);
-    setCurrentBook(book);
-    setView('reader');
+    // Let loading overlay paint first, then switch to reader.
+    window.setTimeout(() => {
+      setCurrentBook(book);
+      setView('reader');
+    }, 0);
   };
 
   const handleBack = () => {
@@ -182,7 +189,7 @@ export default function App() {
             <BookOpen className="w-5 h-5 opacity-80" />
             <h1 className="font-semibold text-lg truncate max-w-[150px] sm:max-w-md flex items-baseline gap-2">
               <span>{currentBook?.title || '随身听'}</span>
-              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.6</span>}
+              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.9</span>}
             </h1>
           </div>
         </div>
@@ -232,7 +239,7 @@ export default function App() {
         )}
       </main>
 
-      {isOpeningBook && view === 'reader' && (
+      {isOpeningBook && (
         <div className={`fixed inset-0 z-[100] flex flex-col items-center justify-center gap-3 ${
           theme === 'dark'
             ? 'bg-slate-950/80 text-slate-100'
@@ -243,7 +250,7 @@ export default function App() {
           <div className={`h-10 w-10 animate-spin rounded-full border-2 border-transparent ${
             theme === 'sepia' ? 'border-t-[#5b4636]' : 'border-t-indigo-500'
           }`} />
-          <p className="text-sm font-medium opacity-85">正在打开书籍并定位进度...</p>
+          <p className="text-sm font-medium opacity-85">加载中...</p>
         </div>
       )}
 
