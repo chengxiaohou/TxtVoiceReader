@@ -355,7 +355,7 @@ export default function App() {
         >
           <div className="max-w-3xl mx-auto flex flex-col gap-4">
             {/* Controls Row */}
-            <div className="flex items-center justify-center gap-4 sm:gap-6">
+            <div className="relative flex items-center justify-center min-h-14 sm:min-h-16">
               <button
                 onClick={handleTogglePlayback}
                 className={`flex items-center gap-2 px-8 py-3 sm:px-10 sm:py-4 rounded-full shadow-lg transform transition-transform active:scale-95 font-bold text-base sm:text-lg ${
@@ -382,7 +382,7 @@ export default function App() {
 
               <button
                 onClick={() => setIsJumpModalOpen(true)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-full transition-all hover:scale-105 active:scale-95 ${
+                className={`absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2 px-4 py-2 rounded-full transition-all hover:scale-105 active:scale-95 ${
                   theme === 'dark' 
                     ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' 
                     : theme === 'sepia'
