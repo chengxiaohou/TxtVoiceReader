@@ -6,9 +6,10 @@ interface ChunkProps {
   isActive: boolean;
   onClick: (index: number) => void;
   onActiveReady?: () => void;
+  scrollSignal?: number;
 }
 
-const Chunk = memo(({ chunk, index, isActive, onClick, onActiveReady }: ChunkProps) => {
+const Chunk = memo(({ chunk, index, isActive, onClick, onActiveReady, scrollSignal }: ChunkProps) => {
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
@@ -19,7 +20,7 @@ const Chunk = memo(({ chunk, index, isActive, onClick, onActiveReady }: ChunkPro
       });
       onActiveReady?.();
     }
-  }, [isActive, onActiveReady]);
+  }, [isActive, onActiveReady, scrollSignal]);
 
   return (
     <span
@@ -49,6 +50,7 @@ interface ReaderProps {
   currentChunkIndex: number;
   onChunkClick?: (index: number) => void;
   onActiveChunkReady?: () => void;
+  scrollSignal?: number;
 }
 
 export const Reader: React.FC<ReaderProps> = ({ 
@@ -58,6 +60,7 @@ export const Reader: React.FC<ReaderProps> = ({
   currentChunkIndex,
   onChunkClick,
   onActiveChunkReady,
+  scrollSignal,
 }) => {
   const chunks = useMemo(() => {
     if (!content) return [];
@@ -89,6 +92,7 @@ export const Reader: React.FC<ReaderProps> = ({
             isActive={index === currentChunkIndex}
             onClick={onChunkClick || (() => {})}
             onActiveReady={onActiveChunkReady}
+            scrollSignal={scrollSignal}
           />
         ))}
       </div>

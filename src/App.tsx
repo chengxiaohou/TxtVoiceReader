@@ -15,6 +15,7 @@ export default function App() {
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
   const [view, setView] = useState<View>('library');
   const [isOpeningBook, setIsOpeningBook] = useState(false);
+  const [playScrollSignal, setPlayScrollSignal] = useState(0);
   const openingStartedAtRef = useRef<number>(0);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [jumpValue, setJumpValue] = useState('');
@@ -107,6 +108,20 @@ export default function App() {
     }, remaining);
   }, []);
 
+  const handleStartPlayback = useCallback(() => {
+    setPlayScrollSignal((prev) => prev + 1);
+    speak();
+  }, [speak]);
+
+  const handleTogglePlayback = useCallback(() => {
+    if (isPlaying) {
+      pause();
+      return;
+    }
+    setPlayScrollSignal((prev) => prev + 1);
+    speak();
+  }, [isPlaying, pause, speak]);
+
   const handleJump = (e: any) => {
     e.preventDefault();
     const percent = parseFloat(jumpValue);
@@ -189,7 +204,7 @@ export default function App() {
             <BookOpen className="w-5 h-5 opacity-80" />
             <h1 className="font-semibold text-lg truncate max-w-[150px] sm:max-w-md flex items-baseline gap-2">
               <span>{currentBook?.title || '随身听'}</span>
-              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.9</span>}
+              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.10</span>}
             </h1>
           </div>
         </div>
@@ -197,7 +212,7 @@ export default function App() {
         <div className="flex items-center gap-2">
           {view === 'reader' && !isPlaying && (
             <button
-              onClick={speak}
+              onClick={handleStartPlayback}
               className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                 theme === 'dark' 
                   ? 'bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30' 
@@ -234,6 +249,7 @@ export default function App() {
               currentChunkIndex={currentChunkIndex}
               onChunkClick={jumpTo}
               onActiveChunkReady={handleReaderReady}
+              scrollSignal={playScrollSignal}
             />
           </div>
         )}
@@ -271,7 +287,7 @@ export default function App() {
             {/* Controls Row */}
             <div className="flex items-center justify-center gap-4 sm:gap-6">
               <button
-                onClick={isPlaying ? pause : speak}
+                onClick={handleTogglePlayback}
                 className={`flex items-center gap-2 px-8 py-3 sm:px-10 sm:py-4 rounded-full shadow-lg transform transition-transform active:scale-95 font-bold text-base sm:text-lg ${
                   theme === 'dark'
                     ? 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-indigo-900/20'
