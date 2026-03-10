@@ -87,7 +87,7 @@ export const SettingsPanel = React.memo(({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className={`fixed right-0 top-0 bottom-0 w-full sm:w-85 shadow-2xl z-50 p-8 overflow-y-auto border-l backdrop-blur-xl transition-colors duration-300 ${
+            className={`fixed right-0 top-0 bottom-0 w-full sm:w-[360px] shadow-2xl z-50 p-8 overflow-y-auto border-l backdrop-blur-xl transition-colors duration-300 ${
               theme === 'dark' 
                 ? 'bg-slate-950/95 border-white/10 text-slate-100' 
                 : theme === 'sepia' 
