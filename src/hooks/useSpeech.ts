@@ -20,6 +20,11 @@ export const useSpeech = (
   initialIndex: number = 0,
   onProgressUpdate?: (index: number, total: number) => void
 ) => {
+  const isSupported =
+    typeof window !== 'undefined' &&
+    typeof window.speechSynthesis !== 'undefined' &&
+    typeof window.SpeechSynthesisUtterance !== 'undefined';
+
   const [state, setState] = useState<SpeechState>({
     isPlaying: false,
     isPaused: false,
@@ -35,7 +40,7 @@ export const useSpeech = (
 
   const chunksRef = useRef<string[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-  const synthRef = useRef(window.speechSynthesis);
+  const synthRef = useRef<SpeechSynthesis | null>(isSupported ? window.speechSynthesis : null);
   
   // Refs to hold latest parameters to avoid closure staleness in recursive calls
   const paramsRef = useRef({
@@ -87,7 +92,9 @@ export const useSpeech = (
 
   // Load voices
   useEffect(() => {
+    if (!isSupported) return;
     const synth = synthRef.current;
+    if (!synth) return;
     const loadVoices = () => {
       const systemVoices = synth.getVoices();
       if (systemVoices.length === 0) return; // Wait for voices to load
@@ -114,7 +121,7 @@ export const useSpeech = (
       clearInterval(interval);
       synth.removeEventListener('voiceschanged', loadVoices);
     };
-  }, []);
+  }, [isSupported]);
 
   // Handle voice change
   const setVoice = useCallback((voice: Voice) => {
@@ -123,6 +130,7 @@ export const useSpeech = (
 
   const speakChunk = useCallback(async (index: number) => {
     const synth = synthRef.current;
+    if (!synth) return;
     if (index >= chunksRef.current.length) {
       setState(prev => ({ ...prev, isPlaying: false, isPaused: false, progress: 1 }));
       return;
@@ -185,6 +193,7 @@ export const useSpeech = (
 
   const speak = useCallback(() => {
     const synth = synthRef.current;
+    if (!synth) return;
     if (state.isPaused) {
       // Resume
       synth.resume();
@@ -202,6 +211,7 @@ export const useSpeech = (
 
   const pause = useCallback(() => {
     const synth = synthRef.current;
+    if (!synth) return;
     if (state.isPlaying) {
       synth.pause();
       setState((prev) => ({ ...prev, isPlaying: false, isPaused: true }));
@@ -210,6 +220,7 @@ export const useSpeech = (
 
   const stop = useCallback(() => {
     const synth = synthRef.current;
+    if (!synth) return;
     synth.cancel();
     setState((prev) => ({ ...prev, isPlaying: false, isPaused: false }));
   }, []);
@@ -265,12 +276,13 @@ export const useSpeech = (
   // Cleanup
   useEffect(() => {
     return () => {
-      synthRef.current.cancel();
+      if (synthRef.current) synthRef.current.cancel();
     };
   }, []);
 
   return useMemo(() => ({
     ...state,
+    isSupported,
     speak,
     pause,
     stop,
