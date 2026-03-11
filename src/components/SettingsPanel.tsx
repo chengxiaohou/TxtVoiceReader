@@ -167,6 +167,8 @@ export const SettingsPanel = React.memo(({
     });
   }, [azureVoices, language]);
 
+  const clampValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -224,9 +226,9 @@ export const SettingsPanel = React.memo(({
               </button>
             </div>
 
-            <div className="space-y-10">
+            <div className="space-y-6">
               {/* Voice Selection */}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-50">
                   <Mic className="w-3.5 h-3.5" />
                   {t.voice}
@@ -236,7 +238,7 @@ export const SettingsPanel = React.memo(({
                     <select
                       value={azureConfig.voice}
                       onChange={(e) => onAzureConfigChange({ ...azureConfig, voice: e.target.value })}
-                      className={`w-full p-4 pr-10 border-2 rounded-2xl text-sm font-medium outline-none transition-all appearance-none cursor-pointer ${
+                      className={`w-full px-4 py-3 pr-10 border-2 rounded-2xl text-sm font-medium outline-none transition-all appearance-none cursor-pointer ${
                         theme === 'dark' 
                           ? 'bg-slate-900/50 border-white/5 text-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10' 
                           : theme === 'sepia' 
@@ -264,7 +266,7 @@ export const SettingsPanel = React.memo(({
                         const voice = voices.find((v) => v.voiceURI === e.target.value);
                         if (voice) onVoiceChange(voice);
                       }}
-                      className={`w-full p-4 pr-10 border-2 rounded-2xl text-sm font-medium outline-none transition-all appearance-none cursor-pointer ${
+                      className={`w-full px-4 py-3 pr-10 border-2 rounded-2xl text-sm font-medium outline-none transition-all appearance-none cursor-pointer ${
                         theme === 'dark' 
                           ? 'bg-slate-900/50 border-white/5 text-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10' 
                           : theme === 'sepia' 
@@ -293,45 +295,64 @@ export const SettingsPanel = React.memo(({
               </div>
 
               {ttsEngine === 'azure' && (
-                <div className="space-y-4">
+                <div className="space-y-3">
                   <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureOutputFormat}</label>
-                  <select
-                    value={azureConfig.outputFormat}
-                    onChange={(e) => onAzureConfigChange({ ...azureConfig, outputFormat: e.target.value })}
-                    className={`w-full px-4 py-3 rounded-xl border text-sm outline-none appearance-none cursor-pointer ${
-                      theme === 'dark'
-                        ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
-                        : theme === 'sepia'
-                          ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
-                          : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
-                    }`}
-                  >
-                    {azureOutputFormats.map((format) => (
-                      <option key={format.value} value={format.value} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
-                        {format.label}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="relative group">
+                    <select
+                      value={azureConfig.outputFormat}
+                      onChange={(e) => onAzureConfigChange({ ...azureConfig, outputFormat: e.target.value })}
+                      className={`w-full px-4 py-3 pr-10 border-2 rounded-2xl text-sm font-medium outline-none transition-all appearance-none cursor-pointer ${
+                        theme === 'dark'
+                          ? 'bg-slate-900/50 border-white/5 text-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10'
+                          : theme === 'sepia'
+                            ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636] focus:ring-4 focus:ring-[#5b4636]/5'
+                            : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-600/5'
+                      }`}
+                    >
+                      {azureOutputFormats.map((format) => (
+                        <option key={format.value} value={format.value} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
+                          {format.label}
+                        </option>
+                      ))}
+                    </select>
+                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
+                      <ChevronLeft className="w-4 h-4 -rotate-90" />
+                    </div>
+                  </div>
                 </div>
               )}
 
               {/* Playback Controls */}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-50">
                   <Volume2 className="w-3.5 h-3.5" />
                   {t.playback}
                 </label>
-                <div className="grid grid-cols-1 gap-8">
+                <div className="grid grid-cols-1 gap-4">
                   {[
                     { label: t.speed, value: `${rate}x`, val: rate, min: 0.5, max: 2, step: 0.1, onChange: onRateChange },
                     { label: t.volume, value: `${Math.round(volume * 100)}%`, val: volume, min: 0, max: 1, step: 0.1, onChange: onVolumeChange },
                   ].map((control) => (
-                    <div key={control.label} className="space-y-4">
+                    <div key={control.label} className="space-y-2">
                       <div className="flex justify-between items-end">
                         <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{control.label}</label>
                         <span className="text-sm font-mono font-bold">{control.value}</span>
                       </div>
-                      <div className="relative flex items-center h-6">
+                      <div className="relative flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => control.onChange(clampValue(Number((control.val - control.step).toFixed(2)), control.min, control.max))}
+                          className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                            theme === 'dark'
+                              ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                              : theme === 'sepia'
+                                ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                                : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                          }`}
+                          aria-label={`${control.label} 减小，当前 ${control.value}`}
+                        >
+                          -
+                        </button>
                         <input
                           type="range"
                           min={control.min}
@@ -339,6 +360,8 @@ export const SettingsPanel = React.memo(({
                           step={control.step}
                           value={control.val}
                           onChange={(e) => control.onChange(parseFloat(e.target.value))}
+                          aria-label={control.label}
+                          aria-valuetext={`${control.label} ${control.value}`}
                           className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
                             theme === 'dark' 
                               ? 'bg-slate-800 accent-indigo-500' 
@@ -347,17 +370,45 @@ export const SettingsPanel = React.memo(({
                                 : 'bg-slate-200 accent-indigo-600'
                           }`}
                         />
+                        <button
+                          type="button"
+                          onClick={() => control.onChange(clampValue(Number((control.val + control.step).toFixed(2)), control.min, control.max))}
+                          className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                            theme === 'dark'
+                              ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                              : theme === 'sepia'
+                                ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                                : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                          }`}
+                          aria-label={`${control.label} 增大，当前 ${control.value}`}
+                        >
+                          +
+                        </button>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div className="space-y-4">
+                <div className="space-y-2">
                   <div className="flex justify-between items-end">
                     <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.pitch}</label>
                     <span className="text-sm font-mono font-bold">{pitch}</span>
                   </div>
-                  <div className="relative flex items-center h-6">
+                  <div className="relative flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => onPitchChange(clampValue(Number((pitch - 0.1).toFixed(2)), 0.5, 2))}
+                      className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                        theme === 'dark'
+                          ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                          : theme === 'sepia'
+                            ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                            : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                      aria-label={`${t.pitch} 减小，当前 ${pitch}`}
+                    >
+                      -
+                    </button>
                     <input
                       type="range"
                       min={0.5}
@@ -365,6 +416,8 @@ export const SettingsPanel = React.memo(({
                       step={0.1}
                       value={pitch}
                       onChange={(e) => onPitchChange(parseFloat(e.target.value))}
+                      aria-label={t.pitch}
+                      aria-valuetext={`${t.pitch} ${pitch}`}
                       className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
                         theme === 'dark' 
                           ? 'bg-slate-800 accent-indigo-500' 
@@ -373,16 +426,48 @@ export const SettingsPanel = React.memo(({
                             : 'bg-slate-200 accent-indigo-600'
                       }`}
                     />
+                    <button
+                      type="button"
+                      onClick={() => onPitchChange(clampValue(Number((pitch + 0.1).toFixed(2)), 0.5, 2))}
+                      className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                        theme === 'dark'
+                          ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                          : theme === 'sepia'
+                            ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                            : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                      }`}
+                      aria-label={`${t.pitch} 增大，当前 ${pitch}`}
+                    >
+                      +
+                    </button>
                   </div>
                 </div>
 
                 {ttsEngine === 'azure' && (
-                  <div className="space-y-4">
+                  <div className="space-y-2">
                     <div className="flex justify-between items-end">
                       <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.paragraphGap}</label>
                       <span className="text-sm font-mono font-bold">{formatGapLabel(azureConfig.overlapEnabled ? azureConfig.overlapMs : 0)}</span>
                     </div>
-                    <div className="relative flex items-center h-6">
+                    <div className="relative flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = azureConfig.overlapEnabled ? azureConfig.overlapMs : 0;
+                          const nextValue = clampValue(current - 20, -320, 320);
+                          onAzureConfigChange({ ...azureConfig, overlapMs: nextValue, overlapEnabled: nextValue !== 0 });
+                        }}
+                        className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                          theme === 'dark'
+                            ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                            : theme === 'sepia'
+                              ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                              : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                        aria-label={`${t.paragraphGap} 减小，当前 ${formatGapLabel(azureConfig.overlapEnabled ? azureConfig.overlapMs : 0)}`}
+                      >
+                        -
+                      </button>
                       <input
                         type="range"
                         min={-320}
@@ -393,6 +478,8 @@ export const SettingsPanel = React.memo(({
                           const nextValue = parseInt(e.target.value, 10) || 0;
                           onAzureConfigChange({ ...azureConfig, overlapMs: nextValue, overlapEnabled: nextValue !== 0 });
                         }}
+                        aria-label={t.paragraphGap}
+                        aria-valuetext={`${t.paragraphGap} ${formatGapLabel(azureConfig.overlapEnabled ? azureConfig.overlapMs : 0)}`}
                         className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
                           theme === 'dark' 
                             ? 'bg-slate-800 accent-indigo-500' 
@@ -401,24 +488,56 @@ export const SettingsPanel = React.memo(({
                               : 'bg-slate-200 accent-indigo-600'
                         }`}
                       />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = azureConfig.overlapEnabled ? azureConfig.overlapMs : 0;
+                          const nextValue = clampValue(current + 20, -320, 320);
+                          onAzureConfigChange({ ...azureConfig, overlapMs: nextValue, overlapEnabled: nextValue !== 0 });
+                        }}
+                        className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                          theme === 'dark'
+                            ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                            : theme === 'sepia'
+                              ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                              : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                        aria-label={`${t.paragraphGap} 增大，当前 ${formatGapLabel(azureConfig.overlapEnabled ? azureConfig.overlapMs : 0)}`}
+                      >
+                        +
+                      </button>
                     </div>
                   </div>
                 )}
               </div>
 
               {/* Reading Display */}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.readingDisplay}</label>
-                <div className="grid grid-cols-1 gap-8">
+                <div className="grid grid-cols-1 gap-4">
                   {[
                     { label: t.fontSize, value: `${fontSize}px`, val: fontSize, min: 12, max: 32, step: 1, onChange: onFontSizeChange }
                   ].map((control) => (
-                    <div key={control.label} className="space-y-4">
+                    <div key={control.label} className="space-y-2">
                       <div className="flex justify-between items-end">
                         <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{control.label}</label>
                         <span className="text-sm font-mono font-bold">{control.value}</span>
                       </div>
-                      <div className="relative flex items-center h-6">
+                      <div className="relative flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => control.onChange(clampValue(control.val - control.step, control.min, control.max))}
+                          className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                            theme === 'dark'
+                              ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                              : theme === 'sepia'
+                                ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                                : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                          }`}
+                          aria-label={`${control.label} 减小，当前 ${control.value}`}
+                        >
+                          -
+                        </button>
                         <input
                           type="range"
                           min={control.min}
@@ -426,6 +545,8 @@ export const SettingsPanel = React.memo(({
                           step={control.step}
                           value={control.val}
                           onChange={(e) => control.onChange(parseFloat(e.target.value))}
+                          aria-label={control.label}
+                          aria-valuetext={`${control.label} ${control.value}`}
                           className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
                             theme === 'dark' 
                               ? 'bg-slate-800 accent-indigo-500' 
@@ -434,12 +555,26 @@ export const SettingsPanel = React.memo(({
                                 : 'bg-slate-200 accent-indigo-600'
                           }`}
                         />
+                        <button
+                          type="button"
+                          onClick={() => control.onChange(clampValue(control.val + control.step, control.min, control.max))}
+                          className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                            theme === 'dark'
+                              ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                              : theme === 'sepia'
+                                ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                                : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                          }`}
+                          aria-label={`${control.label} 增大，当前 ${control.value}`}
+                        >
+                          +
+                        </button>
                       </div>
                     </div>
                   ))}
                 </div>
 
-                <div className="space-y-4 pt-4">
+                <div className="space-y-3 pt-2">
                   <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.theme}</label>
                   <div className="grid grid-cols-3 gap-3">
                     {[
@@ -485,7 +620,7 @@ export const SettingsPanel = React.memo(({
               </div>
 
               {/* Language Selection */}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <label className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-50`}>
                   <Globe className="w-3.5 h-3.5" />
                   {t.language}
