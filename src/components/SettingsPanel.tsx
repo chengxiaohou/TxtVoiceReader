@@ -12,6 +12,7 @@ interface SettingsPanelProps {
   onVoiceChange: (voice: SpeechSynthesisVoice) => void;
   ttsEngine: TtsEngine;
   onTtsEngineChange: (engine: TtsEngine) => void;
+  activationVoices?: { shortName: string; locale: string; localName?: string; gender?: string }[];
   azureConfig: AzureTtsConfig;
   onAzureConfigChange: (config: AzureTtsConfig) => void;
   rate: number;
@@ -41,6 +42,7 @@ export const SettingsPanel = React.memo(({
   onVoiceChange,
   ttsEngine,
   onTtsEngineChange,
+  activationVoices,
   azureConfig,
   onAzureConfigChange,
   rate,
@@ -144,6 +146,12 @@ export const SettingsPanel = React.memo(({
 
     return () => controller.abort();
   }, [ttsEngine, azureConfig.region, azureConfig.key, azureConfig.useChinaEndpoint]);
+
+  useEffect(() => {
+    if (ttsEngine !== 'azure') return;
+    if (!activationVoices || activationVoices.length === 0) return;
+    setAzureVoices(activationVoices);
+  }, [activationVoices, ttsEngine]);
 
   const azureOutputFormats = [
     { value: 'audio-24khz-48kbitrate-mono-mp3', label: t.azureFormatBalanced },
