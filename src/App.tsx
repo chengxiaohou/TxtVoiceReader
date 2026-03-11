@@ -3,7 +3,7 @@ import { Reader } from './components/Reader';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Library } from './components/Library';
 import { useSpeech, AzureTtsConfig, TtsEngine } from './hooks/useSpeech';
-import { Settings, Play, Pause, ChevronLeft, BookOpen } from 'lucide-react';
+import { Settings, Play, Pause, ChevronLeft, BookOpen, Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { addBook, updateProgress, getBook, Book } from './utils/db';
 import { translations, Language } from './i18n';
@@ -100,6 +100,7 @@ export default function App() {
     totalChunks,
     jumpTo,
     status,
+    isLoading,
   } = useSpeech(
     currentBook?.content || '', 
     currentBook?.progress || 0,
@@ -332,7 +333,7 @@ export default function App() {
             <BookOpen className="w-5 h-5 opacity-80" />
             <h1 className="font-semibold text-lg truncate max-w-[150px] sm:max-w-md flex items-baseline gap-2">
               <span>{currentBook?.title || '随身听'}</span>
-              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.19</span>}
+              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.20</span>}
             </h1>
           </div>
         </div>
@@ -425,7 +426,12 @@ export default function App() {
                 }`}
                 aria-label={isPlaying ? t.pause : (isPaused ? t.resume : t.play)}
               >
-                {isPlaying ? (
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span>{t.audioTransmitting}</span>
+                  </>
+                ) : isPlaying ? (
                   <>
                     <Pause className="w-6 h-6 fill-current" />
                     <span>{t.pause}</span>

@@ -21,6 +21,7 @@ export interface UseSpeechOptions {
 export interface SpeechState {
   isPlaying: boolean;
   isPaused: boolean;
+  isLoading: boolean;
   voices: Voice[];
   selectedVoice: Voice | null;
   rate: number;
@@ -49,6 +50,7 @@ export const useSpeech = (
   const [state, setState] = useState<SpeechState>({
     isPlaying: false,
     isPaused: false,
+    isLoading: false,
     voices: [],
     selectedVoice: null,
     rate: 1,
@@ -65,6 +67,8 @@ export const useSpeech = (
   const synthRef = useRef<SpeechSynthesis | null>(isSupported ? window.speechSynthesis : null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const prefetchAbortRef = useRef<AbortController | null>(null);
+  const cacheRef = useRef<Map<number, string>>(new Map());
   
   // Refs to hold latest parameters to avoid closure staleness in recursive calls
   const paramsRef = useRef({
@@ -160,7 +164,23 @@ export const useSpeech = (
       return;
     }
 
-    const chunk = chunksRef.current[index];
+    let safeIndex = index;
+    while (safeIndex < chunksRef.current.length && !chunksRef.current[safeIndex].trim()) {
+      safeIndex += 1;
+    }
+    if (safeIndex >= chunksRef.current.length) {
+      setState(prev => ({ ...prev, isPlaying: false, isPaused: false, progress: 1 }));
+      return;
+    }
+    if (safeIndex !== index) {
+      setState(prev => ({
+        ...prev,
+        currentChunkIndex: safeIndex,
+        progress: safeIndex / chunksRef.current.length,
+      }));
+    }
+
+    const chunk = chunksRef.current[safeIndex];
 
     if (options.engine === 'azure') {
       const config = options.azure;
@@ -186,9 +206,6 @@ export const useSpeech = (
         return;
       }
 
-      abortRef.current?.abort();
-      abortRef.current = new AbortController();
-
       const isChina = config.useChinaEndpoint;
       const tokenUrl = isChina
         ? `https://${region}.api.cognitive.azure.cn/sts/v1.0/issueToken`
@@ -198,20 +215,24 @@ export const useSpeech = (
         ? `https://${region}.tts.speech.azure.cn/cognitiveservices/v1`
         : `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
 
-      const ssml = `<?xml version="1.0" encoding="utf-8"?>
-<speak version="1.0" xml:lang="${voice.split('-').slice(0, 2).join('-')}">
-  <voice name="${voice}">${chunk.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</voice>
-</speak>`;
+      const findNextNonEmptyIndex = (startIndex: number) => {
+        let idx = startIndex;
+        while (idx < chunksRef.current.length && !chunksRef.current[idx].trim()) {
+          idx += 1;
+        }
+        return idx < chunksRef.current.length ? idx : -1;
+      };
 
-      setState(prev => ({ ...prev, status: { level: 'info', message: 'Requesting Azure TTS...' } }));
-
-      try {
+      const fetchAzureAudio = async (targetIndex: number, signal: AbortSignal) => {
+        const effectiveIndex = findNextNonEmptyIndex(targetIndex);
+        if (effectiveIndex < 0) return null;
+        const currentChunk = chunksRef.current[effectiveIndex] || '';
         const tokenResp = await fetch(tokenUrl, {
           method: 'POST',
           headers: {
             'Ocp-Apim-Subscription-Key': key,
           },
-          signal: abortRef.current.signal,
+          signal,
         });
 
         if (!tokenResp.ok) {
@@ -227,8 +248,8 @@ export const useSpeech = (
             'X-Microsoft-OutputFormat': config.outputFormat,
             'User-Agent': 'txt-voice-reader',
           },
-          body: ssml,
-          signal: abortRef.current.signal,
+          body: `<?xml version="1.0" encoding="utf-8"?>\n<speak version="1.0" xml:lang="${voice.split('-').slice(0, 2).join('-')}">\n  <voice name="${voice}">${currentChunk.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</voice>\n</speak>`,
+          signal,
         });
 
         if (!audioResp.ok) {
@@ -237,7 +258,42 @@ export const useSpeech = (
 
         const audioBuffer = await audioResp.arrayBuffer();
         const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-        const url = URL.createObjectURL(blob);
+        return { url: URL.createObjectURL(blob), index: effectiveIndex };
+      };
+
+      const prefetchNext = (nextIndex: number) => {
+        const effectiveIndex = findNextNonEmptyIndex(nextIndex);
+        if (effectiveIndex < 0) return;
+        if (cacheRef.current.has(effectiveIndex)) return;
+        prefetchAbortRef.current?.abort();
+        prefetchAbortRef.current = new AbortController();
+        fetchAzureAudio(effectiveIndex, prefetchAbortRef.current.signal)
+          .then((result) => {
+            if (!result) return;
+            cacheRef.current.set(result.index, result.url);
+          })
+          .catch(() => {
+            // ignore prefetch errors
+          });
+      };
+
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+
+      setState(prev => ({ ...prev, isLoading: true, status: { level: 'info', message: 'Requesting Azure TTS...' } }));
+
+      try {
+        let url = cacheRef.current.get(safeIndex) || null;
+        if (url) {
+          cacheRef.current.delete(safeIndex);
+        } else {
+          const result = await fetchAzureAudio(safeIndex, abortRef.current.signal);
+          url = result ? result.url : null;
+        }
+        if (!url) {
+          setState(prev => ({ ...prev, isLoading: false }));
+          return;
+        }
 
         if (!audioRef.current) {
           audioRef.current = new Audio();
@@ -247,7 +303,7 @@ export const useSpeech = (
         audio.src = url;
         audio.onended = () => {
           URL.revokeObjectURL(url);
-          const nextIndex = index + 1;
+          const nextIndex = safeIndex + 1;
           if (nextIndex < chunksRef.current.length) {
             setState(prev => ({
               ...prev,
@@ -255,9 +311,10 @@ export const useSpeech = (
               progress: nextIndex / chunksRef.current.length,
               status: { level: 'idle', message: '' },
             }));
+            prefetchNext(nextIndex + 1);
             speakChunk(nextIndex);
           } else {
-            setState(prev => ({ ...prev, isPlaying: false, isPaused: false, progress: 1, status: { level: 'idle', message: '' } }));
+            setState(prev => ({ ...prev, isPlaying: false, isPaused: false, isLoading: false, progress: 1, status: { level: 'idle', message: '' } }));
             if (onProgressUpdate) {
               onProgressUpdate(chunksRef.current.length, chunksRef.current.length);
             }
@@ -265,6 +322,8 @@ export const useSpeech = (
         };
 
         await audio.play();
+        setState(prev => ({ ...prev, isLoading: false }));
+        prefetchNext(safeIndex + 1);
       } catch (error: any) {
         if (error?.name === 'AbortError') return;
         console.error('Azure TTS error', error);
@@ -272,6 +331,7 @@ export const useSpeech = (
           ...prev,
           isPlaying: false,
           isPaused: false,
+          isLoading: false,
           status: { level: 'error', message: 'Azure TTS failed. Check region/key/voice.' }
         }));
       }
@@ -294,7 +354,7 @@ export const useSpeech = (
     utterance.volume = paramsRef.current.volume;
 
     utterance.onend = () => {
-      const nextIndex = index + 1;
+      const nextIndex = safeIndex + 1;
       if (nextIndex < chunksRef.current.length) {
         setState(prev => ({
           ...prev,
@@ -375,12 +435,15 @@ export const useSpeech = (
       synth.cancel();
     } else {
       abortRef.current?.abort();
+      prefetchAbortRef.current?.abort();
+      cacheRef.current.forEach((url) => URL.revokeObjectURL(url));
+      cacheRef.current.clear();
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = '';
       }
     }
-    setState((prev) => ({ ...prev, isPlaying: false, isPaused: false }));
+    setState((prev) => ({ ...prev, isPlaying: false, isPaused: false, isLoading: false }));
   }, [options.engine]);
 
   const skipForward = useCallback(() => {
@@ -436,6 +499,9 @@ export const useSpeech = (
     return () => {
       if (synthRef.current) synthRef.current.cancel();
       abortRef.current?.abort();
+      prefetchAbortRef.current?.abort();
+      cacheRef.current.forEach((url) => URL.revokeObjectURL(url));
+      cacheRef.current.clear();
     };
   }, []);
 
@@ -453,6 +519,7 @@ export const useSpeech = (
     setVolume,
     jumpTo,
     status: state.status,
+    isLoading: state.isLoading,
   }), [
     state,
     speak,
@@ -466,5 +533,6 @@ export const useSpeech = (
     setVolume,
     jumpTo,
     state.status,
+    state.isLoading,
   ]);
 };
