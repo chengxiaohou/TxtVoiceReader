@@ -142,6 +142,20 @@ export const SettingsPanel = React.memo(({
     { value: 'raw-16khz-16bit-mono-pcm', label: t.azureFormatRaw16k },
   ];
 
+  const paragraphGapOptions = [
+    { value: 0, label: t.paragraphGapStandard },
+    { value: -320, label: t.paragraphGapLateOption.replace('{ms}', '320') },
+    { value: -240, label: t.paragraphGapLateOption.replace('{ms}', '240') },
+    { value: -180, label: t.paragraphGapLateOption.replace('{ms}', '180') },
+    { value: -120, label: t.paragraphGapLateOption.replace('{ms}', '120') },
+    { value: -80, label: t.paragraphGapLateOption.replace('{ms}', '80') },
+    { value: 80, label: t.paragraphGapEarlyOption.replace('{ms}', '80') },
+    { value: 120, label: t.paragraphGapEarlyOption.replace('{ms}', '120') },
+    { value: 180, label: t.paragraphGapEarlyOption.replace('{ms}', '180') },
+    { value: 240, label: t.paragraphGapEarlyOption.replace('{ms}', '240') },
+    { value: 320, label: t.paragraphGapEarlyOption.replace('{ms}', '320') },
+  ];
+
   const groupedAzureVoices = useMemo(() => {
     const groups: Record<string, { shortName: string; locale: string; localName?: string; gender?: string }[]> = {};
     azureVoices.forEach((voice) => {
@@ -177,22 +191,31 @@ export const SettingsPanel = React.memo(({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className={`fixed right-0 top-0 bottom-0 w-full sm:w-[360px] shadow-2xl z-50 p-8 overflow-y-auto border-l backdrop-blur-xl transition-colors duration-300 ${
+            className={`fixed right-0 top-0 bottom-0 w-full sm:w-[360px] shadow-2xl z-50 px-8 pt-0 pb-8 overflow-y-auto border-l backdrop-blur-xl transition-colors duration-300 ${
               theme === 'dark' 
                 ? 'bg-slate-950/95 border-white/10 text-slate-100' 
                 : theme === 'sepia' 
                   ? 'bg-[#f4ecd8]/95 border-[#5b4636]/10 text-[#5b4636]' 
                   : 'bg-white/95 border-black/5 text-slate-900'
             }`}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="settings-title"
           >
-            <div className="flex items-center justify-between mb-10">
+            <div className={`sticky top-0 z-20 -mx-8 px-8 pt-8 pb-6 flex items-center justify-between backdrop-blur-xl shadow-sm ${
+              theme === 'dark' 
+                ? 'bg-slate-950/98 border-b border-white/5' 
+                : theme === 'sepia' 
+                  ? 'bg-[#f4ecd8]/98 border-b border-[#5b4636]/10' 
+                  : 'bg-white/98 border-b border-black/5'
+            }`}>
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-xl ${
                   theme === 'dark' ? 'bg-indigo-500/10 text-indigo-400' : theme === 'sepia' ? 'bg-[#5b4636]/10 text-[#5b4636]' : 'bg-indigo-50 text-indigo-600'
                 }`}>
                   <Settings className="w-5 h-5" />
                 </div>
-                <h2 className="text-xl font-bold tracking-tight">{t.settings}</h2>
+                <h2 id="settings-title" className="text-xl font-bold tracking-tight">{t.settings}</h2>
               </div>
               <button
                 onClick={onClose}
@@ -210,215 +233,6 @@ export const SettingsPanel = React.memo(({
             </div>
 
             <div className="space-y-10">
-              {/* TTS Engine */}
-              <div className="space-y-4">
-                <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-50">
-                  <Volume2 className="w-3.5 h-3.5" />
-                  {t.ttsEngine}
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { id: 'browser', label: t.engineBrowser },
-                    { id: 'azure', label: t.engineAzure }
-                  ].map((engine) => (
-                    <button
-                      key={engine.id}
-                      onClick={() => onTtsEngineChange(engine.id as TtsEngine)}
-                      className={`py-3 px-4 rounded-2xl text-sm font-bold transition-all border-2 ${
-                        ttsEngine === engine.id
-                          ? theme === 'dark'
-                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20'
-                            : theme === 'sepia'
-                              ? 'bg-[#5b4636] border-[#5b4636] text-[#f4ecd8]'
-                              : 'bg-slate-900 border-slate-900 text-white shadow-lg shadow-slate-900/20'
-                          : theme === 'dark'
-                            ? 'bg-slate-900/50 border-white/5 text-slate-400 hover:border-white/10 hover:text-slate-200'
-                            : theme === 'sepia'
-                              ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636]/70 hover:border-[#5b4636]/40'
-                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900'
-                      }`}
-                    >
-                      {engine.label}
-                    </button>
-                  ))}
-                </div>
-
-                {ttsEngine === 'azure' && (
-                  <div className={`space-y-4 p-4 rounded-2xl border ${
-                    theme === 'dark'
-                      ? 'bg-slate-900/50 border-white/5'
-                      : theme === 'sepia'
-                        ? 'bg-[#f4ecd8]/60 border-[#5b4636]/20'
-                        : 'bg-slate-50 border-slate-200'
-                  }`}>
-                    <p className="text-xs opacity-70">
-                      {t.azureHint}
-                    </p>
-
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureRegion}</label>
-                      <input
-                        type="text"
-                        value={azureConfig.region}
-                        onChange={(e) => onAzureConfigChange({ ...azureConfig, region: e.target.value })}
-                        placeholder="eastasia"
-                        className={`w-full px-4 py-3 rounded-xl border text-sm outline-none ${
-                          theme === 'dark'
-                            ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
-                            : theme === 'sepia'
-                              ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
-                              : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
-                        }`}
-                      />
-                    </div>
-
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureKey}</label>
-                      <input
-                        type="password"
-                        value={azureConfig.key}
-                        onChange={(e) => onAzureConfigChange({ ...azureConfig, key: e.target.value })}
-                        placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                        className={`w-full px-4 py-3 rounded-xl border text-sm outline-none ${
-                          theme === 'dark'
-                            ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
-                            : theme === 'sepia'
-                              ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
-                              : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
-                        }`}
-                      />
-                    </div>
-
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureVoice}</label>
-                      <input
-                        type="text"
-                        value={azureConfig.voice}
-                        onChange={(e) => onAzureConfigChange({ ...azureConfig, voice: e.target.value })}
-                        placeholder="zh-CN-XiaoxiaoNeural"
-                        className={`w-full px-4 py-3 rounded-xl border text-sm outline-none ${
-                          theme === 'dark'
-                            ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
-                            : theme === 'sepia'
-                              ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
-                              : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
-                        }`}
-                      />
-                    </div>
-
-                    <div className="space-y-3">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureOutputFormat}</label>
-                      <select
-                        value={azureConfig.outputFormat}
-                        onChange={(e) => onAzureConfigChange({ ...azureConfig, outputFormat: e.target.value })}
-                        className={`w-full px-4 py-3 rounded-xl border text-sm outline-none appearance-none cursor-pointer ${
-                          theme === 'dark'
-                            ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
-                            : theme === 'sepia'
-                              ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
-                              : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
-                        }`}
-                      >
-                        {azureOutputFormats.map((format) => (
-                          <option key={format.value} value={format.value} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
-                            {format.label}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <label className="flex items-center gap-3 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={azureConfig.useChinaEndpoint}
-                        onChange={(e) => onAzureConfigChange({ ...azureConfig, useChinaEndpoint: e.target.checked })}
-                        className="h-4 w-4"
-                      />
-                      <span className="opacity-80">{t.azureChinaEndpoint}</span>
-                    </label>
-
-                    <label className="flex items-center gap-3 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={azureConfig.overlapEnabled}
-                        onChange={(e) => onAzureConfigChange({ ...azureConfig, overlapEnabled: e.target.checked })}
-                        className="h-4 w-4"
-                      />
-                      <span className="opacity-80">{t.azureOverlap}</span>
-                    </label>
-
-                    {azureConfig.overlapEnabled && (
-                      <div className="space-y-3">
-                        <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureOverlapLead}</label>
-                        <select
-                          value={String(azureConfig.overlapMs)}
-                          onChange={(e) => onAzureConfigChange({ ...azureConfig, overlapMs: parseInt(e.target.value, 10) || 0 })}
-                          className={`w-full px-4 py-3 rounded-xl border text-sm outline-none appearance-none cursor-pointer ${
-                            theme === 'dark'
-                              ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
-                              : theme === 'sepia'
-                                ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
-                                : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
-                          }`}
-                        >
-                          {[80, 120, 180, 240, 320].map((ms) => (
-                            <option key={ms} value={String(ms)} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
-                              {t.azureOverlapLeadOption.replace('{ms}', String(ms))}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    )}
-
-                    {status?.message && (
-                      <div className={`text-xs font-medium ${
-                        status.level === 'error'
-                          ? 'text-red-400'
-                          : status.level === 'info'
-                            ? 'text-amber-400'
-                            : 'opacity-60'
-                      }`}>
-                        {status.message}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Language Selection */}
-              <div className="space-y-4">
-                <label className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-50`}>
-                  <Globe className="w-3.5 h-3.5" />
-                  {t.language}
-                </label>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { id: 'en', label: t.english },
-                    { id: 'zh', label: t.chinese }
-                  ].map((lang) => (
-                    <button
-                      key={lang.id}
-                      onClick={() => onLanguageChange(lang.id as Language)}
-                      className={`py-3 px-4 rounded-2xl text-sm font-bold transition-all border-2 ${
-                        language === lang.id
-                          ? theme === 'dark'
-                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20'
-                            : theme === 'sepia'
-                              ? 'bg-[#5b4636] border-[#5b4636] text-[#f4ecd8]'
-                              : 'bg-slate-900 border-slate-900 text-white shadow-lg shadow-slate-900/20'
-                          : theme === 'dark'
-                            ? 'bg-slate-900/50 border-white/5 text-slate-400 hover:border-white/10 hover:text-slate-200'
-                            : theme === 'sepia'
-                              ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636]/70 hover:border-[#5b4636]/40'
-                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900'
-                      }`}
-                    >
-                      {lang.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
               {/* Voice Selection */}
               <div className="space-y-4">
                 <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-50">
@@ -486,27 +300,306 @@ export const SettingsPanel = React.memo(({
                 )}
               </div>
 
-              {/* Controls Grid */}
-              <div className="grid grid-cols-1 gap-8">
-                {[
-                  { label: t.speed, value: `${rate}x`, val: rate, min: 0.5, max: 2, step: 0.1, onChange: onRateChange },
-                  { label: t.pitch, value: pitch, val: pitch, min: 0.5, max: 2, step: 0.1, onChange: onPitchChange },
-                  { label: t.volume, value: `${Math.round(volume * 100)}%`, val: volume, min: 0, max: 1, step: 0.1, onChange: onVolumeChange },
-                  { label: t.fontSize, value: `${fontSize}px`, val: fontSize, min: 12, max: 32, step: 1, onChange: onFontSizeChange }
-                ].map((control) => (
-                  <div key={control.label} className="space-y-4">
+              {ttsEngine === 'azure' && (
+                <div className="space-y-4">
+                  <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureOutputFormat}</label>
+                  <select
+                    value={azureConfig.outputFormat}
+                    onChange={(e) => onAzureConfigChange({ ...azureConfig, outputFormat: e.target.value })}
+                    className={`w-full px-4 py-3 rounded-xl border text-sm outline-none appearance-none cursor-pointer ${
+                      theme === 'dark'
+                        ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
+                        : theme === 'sepia'
+                          ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
+                          : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
+                    }`}
+                  >
+                    {azureOutputFormats.map((format) => (
+                      <option key={format.value} value={format.value} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
+                        {format.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* Playback Controls */}
+              <div className="space-y-4">
+                <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-50">
+                  <Volume2 className="w-3.5 h-3.5" />
+                  {t.playback}
+                </label>
+                <div className="grid grid-cols-1 gap-8">
+                  {[
+                    { label: t.speed, value: `${rate}x`, val: rate, min: 0.5, max: 2, step: 0.1, onChange: onRateChange },
+                    { label: t.volume, value: `${Math.round(volume * 100)}%`, val: volume, min: 0, max: 1, step: 0.1, onChange: onVolumeChange },
+                  ].map((control) => (
+                    <div key={control.label} className="space-y-4">
+                      <div className="flex justify-between items-end">
+                        <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{control.label}</label>
+                        <span className="text-sm font-mono font-bold">{control.value}</span>
+                      </div>
+                      <div className="relative flex items-center h-6">
+                        <input
+                          type="range"
+                          min={control.min}
+                          max={control.max}
+                          step={control.step}
+                          value={control.val}
+                          onChange={(e) => control.onChange(parseFloat(e.target.value))}
+                          className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
+                            theme === 'dark' 
+                              ? 'bg-slate-800 accent-indigo-500' 
+                              : theme === 'sepia' 
+                                ? 'bg-[#5b4636]/10 accent-[#5b4636]' 
+                                : 'bg-slate-200 accent-indigo-600'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {ttsEngine === 'azure' && (
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.paragraphGap}</label>
+                    <select
+                      value={String(azureConfig.overlapEnabled ? azureConfig.overlapMs : 0)}
+                      onChange={(e) => {
+                        const nextValue = parseInt(e.target.value, 10) || 0;
+                        onAzureConfigChange({ ...azureConfig, overlapMs: nextValue, overlapEnabled: nextValue !== 0 });
+                      }}
+                      className={`w-full px-4 py-3 rounded-xl border text-sm outline-none appearance-none cursor-pointer ${
+                        theme === 'dark'
+                          ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
+                          : theme === 'sepia'
+                            ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
+                            : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
+                      }`}
+                    >
+                      {paragraphGapOptions.map((option) => (
+                        <option key={option.value} value={String(option.value)} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Reading Display */}
+              <div className="space-y-4">
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.readingDisplay}</label>
+                <div className="grid grid-cols-1 gap-8">
+                  {[
+                    { label: t.fontSize, value: `${fontSize}px`, val: fontSize, min: 12, max: 32, step: 1, onChange: onFontSizeChange }
+                  ].map((control) => (
+                    <div key={control.label} className="space-y-4">
+                      <div className="flex justify-between items-end">
+                        <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{control.label}</label>
+                        <span className="text-sm font-mono font-bold">{control.value}</span>
+                      </div>
+                      <div className="relative flex items-center h-6">
+                        <input
+                          type="range"
+                          min={control.min}
+                          max={control.max}
+                          step={control.step}
+                          value={control.val}
+                          onChange={(e) => control.onChange(parseFloat(e.target.value))}
+                          className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
+                            theme === 'dark' 
+                              ? 'bg-slate-800 accent-indigo-500' 
+                              : theme === 'sepia' 
+                                ? 'bg-[#5b4636]/10 accent-[#5b4636]' 
+                                : 'bg-slate-200 accent-indigo-600'
+                          }`}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="space-y-4 pt-4">
+                  <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.theme}</label>
+                  <div className="grid grid-cols-3 gap-3">
+                    {[
+                      { id: 'light', label: t.light, icon: 'bg-white border-slate-200' },
+                      { id: 'dark', label: t.dark, icon: 'bg-slate-900 border-slate-800' },
+                      { id: 'sepia', label: t.sepia, icon: 'bg-[#f4ecd8] border-[#eaddc5]' }
+                    ].map((tItem) => (
+                      <button
+                        key={tItem.id}
+                        onClick={() => onThemeChange(tItem.id as any)}
+                        className={`group relative flex flex-col items-center gap-3 p-3 rounded-2xl transition-all border-2 ${
+                          theme === tItem.id
+                            ? theme === 'dark'
+                              ? 'border-indigo-500 bg-indigo-500/10'
+                              : theme === 'sepia'
+                                ? 'border-[#5b4636] bg-[#5b4636]/10'
+                                : 'border-indigo-600 bg-indigo-50'
+                            : theme === 'dark'
+                              ? 'border-white/5 bg-slate-900/50 hover:border-white/10'
+                              : theme === 'sepia'
+                                ? 'border-[#5b4636]/10 bg-transparent hover:border-[#5b4636]/30'
+                                : 'border-slate-200 bg-slate-50 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className={`w-full aspect-square rounded-lg border shadow-sm ${tItem.icon}`} />
+                        <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                          theme === tItem.id ? 'opacity-100' : 'opacity-40'
+                        }`}>
+                          {tItem.label}
+                        </span>
+                        {theme === tItem.id && (
+                          <motion.div
+                            layoutId="activeTheme"
+                            className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 ${
+                              theme === 'dark' ? 'bg-indigo-500 border-slate-950' : theme === 'sepia' ? 'bg-[#5b4636] border-[#f4ecd8]' : 'bg-indigo-600 border-white'
+                            }`}
+                          />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Language Selection */}
+              <div className="space-y-4">
+                <label className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-50`}>
+                  <Globe className="w-3.5 h-3.5" />
+                  {t.language}
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { id: 'en', label: t.english },
+                    { id: 'zh', label: t.chinese }
+                  ].map((lang) => (
+                    <button
+                      key={lang.id}
+                      onClick={() => onLanguageChange(lang.id as Language)}
+                      className={`py-3 px-4 rounded-2xl text-sm font-bold transition-all border-2 ${
+                        language === lang.id
+                          ? theme === 'dark'
+                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20'
+                            : theme === 'sepia'
+                              ? 'bg-[#5b4636] border-[#5b4636] text-[#f4ecd8]'
+                              : 'bg-slate-900 border-slate-900 text-white shadow-lg shadow-slate-900/20'
+                          : theme === 'dark'
+                            ? 'bg-slate-900/50 border-white/5 text-slate-400 hover:border-white/10 hover:text-slate-200'
+                            : theme === 'sepia'
+                              ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636]/70 hover:border-[#5b4636]/40'
+                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                      }`}
+                    >
+                      {lang.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Developer Options */}
+              <details className={`rounded-2xl border p-4 ${
+                theme === 'dark'
+                  ? 'bg-slate-900/50 border-white/5'
+                  : theme === 'sepia'
+                    ? 'bg-[#f4ecd8]/60 border-[#5b4636]/20'
+                    : 'bg-slate-50 border-slate-200'
+              }`}>
+                <summary className="cursor-pointer text-sm font-semibold opacity-80">{t.developerOptions}</summary>
+                <div className="space-y-4 pt-4">
+                  <p className="text-xs opacity-70">
+                    {t.azureHint}
+                  </p>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.ttsEngine}</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { id: 'browser', label: t.engineBrowser },
+                        { id: 'azure', label: t.engineAzure }
+                      ].map((engine) => (
+                        <button
+                          key={engine.id}
+                          onClick={() => onTtsEngineChange(engine.id as TtsEngine)}
+                          className={`py-3 px-4 rounded-2xl text-sm font-bold transition-all border-2 ${
+                            ttsEngine === engine.id
+                              ? theme === 'dark'
+                                ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20'
+                                : theme === 'sepia'
+                                  ? 'bg-[#5b4636] border-[#5b4636] text-[#f4ecd8]'
+                                  : 'bg-slate-900 border-slate-900 text-white shadow-lg shadow-slate-900/20'
+                              : theme === 'dark'
+                                ? 'bg-slate-900/50 border-white/5 text-slate-400 hover:border-white/10 hover:text-slate-200'
+                                : theme === 'sepia'
+                                  ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636]/70 hover:border-[#5b4636]/40'
+                                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                          }`}
+                        >
+                          {engine.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureRegion}</label>
+                    <input
+                      type="text"
+                      value={azureConfig.region}
+                      onChange={(e) => onAzureConfigChange({ ...azureConfig, region: e.target.value })}
+                      placeholder="eastasia"
+                      className={`w-full px-4 py-3 rounded-xl border text-sm outline-none ${
+                        theme === 'dark'
+                          ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
+                          : theme === 'sepia'
+                            ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
+                            : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
+                      }`}
+                    />
+                  </div>
+
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureKey}</label>
+                    <input
+                      type="password"
+                      value={azureConfig.key}
+                      onChange={(e) => onAzureConfigChange({ ...azureConfig, key: e.target.value })}
+                      placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                      className={`w-full px-4 py-3 rounded-xl border text-sm outline-none ${
+                        theme === 'dark'
+                          ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
+                          : theme === 'sepia'
+                            ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
+                            : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
+                      }`}
+                    />
+                  </div>
+
+                  <label className="flex items-center gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={azureConfig.useChinaEndpoint}
+                      onChange={(e) => onAzureConfigChange({ ...azureConfig, useChinaEndpoint: e.target.checked })}
+                      className="h-4 w-4"
+                    />
+                    <span className="opacity-80">{t.azureChinaEndpoint}</span>
+                  </label>
+
+                  <div className="space-y-4">
                     <div className="flex justify-between items-end">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{control.label}</label>
-                      <span className="text-sm font-mono font-bold">{control.value}</span>
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.pitch}</label>
+                      <span className="text-sm font-mono font-bold">{pitch}</span>
                     </div>
                     <div className="relative flex items-center h-6">
                       <input
                         type="range"
-                        min={control.min}
-                        max={control.max}
-                        step={control.step}
-                        value={control.val}
-                        onChange={(e) => control.onChange(parseFloat(e.target.value))}
+                        min={0.5}
+                        max={2}
+                        step={0.1}
+                        value={pitch}
+                        onChange={(e) => onPitchChange(parseFloat(e.target.value))}
                         className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
                           theme === 'dark' 
                             ? 'bg-slate-800 accent-indigo-500' 
@@ -517,53 +610,20 @@ export const SettingsPanel = React.memo(({
                       />
                     </div>
                   </div>
-                ))}
-              </div>
 
-              {/* Theme Selection */}
-              <div className="space-y-4 pt-4">
-                <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.theme}</label>
-                <div className="grid grid-cols-3 gap-3">
-                  {[
-                    { id: 'light', label: t.light, icon: 'bg-white border-slate-200' },
-                    { id: 'dark', label: t.dark, icon: 'bg-slate-900 border-slate-800' },
-                    { id: 'sepia', label: t.sepia, icon: 'bg-[#f4ecd8] border-[#eaddc5]' }
-                  ].map((tItem) => (
-                    <button
-                      key={tItem.id}
-                      onClick={() => onThemeChange(tItem.id as any)}
-                      className={`group relative flex flex-col items-center gap-3 p-3 rounded-2xl transition-all border-2 ${
-                        theme === tItem.id
-                          ? theme === 'dark'
-                            ? 'border-indigo-500 bg-indigo-500/10'
-                            : theme === 'sepia'
-                              ? 'border-[#5b4636] bg-[#5b4636]/10'
-                              : 'border-indigo-600 bg-indigo-50'
-                          : theme === 'dark'
-                            ? 'border-white/5 bg-slate-900/50 hover:border-white/10'
-                            : theme === 'sepia'
-                              ? 'border-[#5b4636]/10 bg-transparent hover:border-[#5b4636]/30'
-                              : 'border-slate-200 bg-slate-50 hover:border-slate-300'
-                      }`}
-                    >
-                      <div className={`w-full aspect-square rounded-lg border shadow-sm ${tItem.icon}`} />
-                      <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                        theme === tItem.id ? 'opacity-100' : 'opacity-40'
-                      }`}>
-                        {tItem.label}
-                      </span>
-                      {theme === tItem.id && (
-                        <motion.div
-                          layoutId="activeTheme"
-                          className={`absolute -top-1 -right-1 w-3 h-3 rounded-full border-2 ${
-                            theme === 'dark' ? 'bg-indigo-500 border-slate-950' : theme === 'sepia' ? 'bg-[#5b4636] border-[#f4ecd8]' : 'bg-indigo-600 border-white'
-                          }`}
-                        />
-                      )}
-                    </button>
-                  ))}
+                  {status?.message && (
+                    <div className={`text-xs font-medium ${
+                      status.level === 'error'
+                        ? 'text-red-400'
+                        : status.level === 'info'
+                          ? 'text-amber-400'
+                          : 'opacity-60'
+                    }`}>
+                      {status.message}
+                    </div>
+                  )}
                 </div>
-              </div>
+              </details>
             </div>
           </motion.div>
         </>

@@ -37,6 +37,8 @@ export default function App() {
     voice: envVoice || 'zh-CN-XiaoxiaoNeural',
     outputFormat: envOutputFormat || 'audio-24khz-48kbitrate-mono-mp3',
     useChinaEndpoint: envUseChina || false,
+    overlapEnabled: false,
+    overlapMs: 0,
   });
   const [isAzureConfigHydrated, setIsAzureConfigHydrated] = useState(false);
 
@@ -320,6 +322,8 @@ export default function App() {
           voice: parsed.voice || envVoice || 'zh-CN-XiaoxiaoNeural',
           outputFormat: parsed.outputFormat || envOutputFormat || 'audio-24khz-48kbitrate-mono-mp3',
           useChinaEndpoint: parsed.useChinaEndpoint ?? envUseChina ?? false,
+          overlapEnabled: parsed.overlapEnabled ?? false,
+          overlapMs: typeof parsed.overlapMs === 'number' ? parsed.overlapMs : 0,
         });
         if (parsed.engine === 'browser' || parsed.engine === 'azure') {
           setTtsEngine(parsed.engine);
@@ -393,7 +397,7 @@ export default function App() {
             <BookOpen className="w-5 h-5 opacity-80" />
             <h1 className="font-semibold text-lg truncate max-w-[150px] sm:max-w-md flex items-baseline gap-2">
               <span>{currentBook?.title || '随身听'}</span>
-              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.25</span>}
+              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.29</span>}
             </h1>
           </div>
         </div>

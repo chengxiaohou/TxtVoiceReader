@@ -310,8 +310,10 @@ export const useSpeech = (
         console.log(`[AzureTTS] start chunk=${playIndex} t=${startAt.toFixed(1)}ms`);
 
         let overlapStarted = false;
-        const leadMs = Math.max(0, config.overlapMs || 0);
-        const shouldOverlap = Boolean(config.overlapEnabled) && Boolean(chunkBoundaryRef.current[playIndex]);
+        const rawGapMs = (config.overlapEnabled ? config.overlapMs : 0) || 0;
+        const leadMs = Math.max(0, rawGapMs);
+        const delayMs = Math.max(0, -rawGapMs);
+        const shouldOverlap = leadMs > 0 && Boolean(chunkBoundaryRef.current[playIndex]);
         const nextIndex = findNextNonEmptyIndex(playIndex + 1);
         let overlapTimer: number | null = null;
 
@@ -373,26 +375,36 @@ export const useSpeech = (
           }
           const nextDirect = playIndex + 1;
           if (nextDirect < chunksRef.current.length) {
-            setState(prev => ({
-              ...prev,
-              currentChunkIndex: nextDirect,
-              progress: nextDirect / chunksRef.current.length,
-              status: { level: 'idle', message: '' },
-            }));
-            const cachedNext = cacheRef.current.get(nextDirect) || null;
-            if (cachedNext) {
-              cacheRef.current.delete(nextDirect);
+            const startNext = () => {
+              setState(prev => ({
+                ...prev,
+                currentChunkIndex: nextDirect,
+                progress: nextDirect / chunksRef.current.length,
+                status: { level: 'idle', message: '' },
+              }));
+              const cachedNext = cacheRef.current.get(nextDirect) || null;
+              if (cachedNext) {
+                cacheRef.current.delete(nextDirect);
+                prefetchNext(nextDirect + 1);
+                startAzurePlayback(nextDirect, cachedNext, audioRef.current || audioEl);
+                return;
+              }
               prefetchNext(nextDirect + 1);
-              startAzurePlayback(nextDirect, cachedNext, audioRef.current || audioEl);
+              speakChunk(nextDirect);
+            };
+
+            if (delayMs > 0) {
+              window.setTimeout(startNext, delayMs);
               return;
             }
-            prefetchNext(nextDirect + 1);
-            speakChunk(nextDirect);
-          } else {
-            setState(prev => ({ ...prev, isPlaying: false, isPaused: false, isLoading: false, progress: 1, status: { level: 'idle', message: '' } }));
-            if (onProgressUpdate) {
-              onProgressUpdate(chunksRef.current.length, chunksRef.current.length);
-            }
+
+            startNext();
+            return;
+          }
+
+          setState(prev => ({ ...prev, isPlaying: false, isPaused: false, isLoading: false, progress: 1, status: { level: 'idle', message: '' } }));
+          if (onProgressUpdate) {
+            onProgressUpdate(chunksRef.current.length, chunksRef.current.length);
           }
         };
 
