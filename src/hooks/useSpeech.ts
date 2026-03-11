@@ -2,6 +2,22 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 
 export type Voice = SpeechSynthesisVoice;
 
+export type TtsEngine = 'browser' | 'azure';
+
+export interface AzureTtsConfig {
+  enabled: boolean;
+  region: string;
+  key: string;
+  voice: string;
+  outputFormat: string;
+  useChinaEndpoint: boolean;
+}
+
+export interface UseSpeechOptions {
+  engine: TtsEngine;
+  azure?: AzureTtsConfig;
+}
+
 export interface SpeechState {
   isPlaying: boolean;
   isPaused: boolean;
@@ -13,12 +29,17 @@ export interface SpeechState {
   progress: number; // 0 to 1 (overall)
   currentChunkIndex: number;
   totalChunks: number;
+  status: {
+    level: 'idle' | 'info' | 'error';
+    message: string;
+  };
 }
 
 export const useSpeech = (
   text: string, 
   initialIndex: number = 0,
-  onProgressUpdate?: (index: number, total: number) => void
+  onProgressUpdate?: (index: number, total: number) => void,
+  options: UseSpeechOptions = { engine: 'browser' }
 ) => {
   const isSupported =
     typeof window !== 'undefined' &&
@@ -36,11 +57,14 @@ export const useSpeech = (
     progress: 0,
     currentChunkIndex: initialIndex,
     totalChunks: 0,
+    status: { level: 'idle', message: '' },
   });
 
   const chunksRef = useRef<string[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const synthRef = useRef<SpeechSynthesis | null>(isSupported ? window.speechSynthesis : null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   
   // Refs to hold latest parameters to avoid closure staleness in recursive calls
   const paramsRef = useRef({
@@ -130,19 +154,135 @@ export const useSpeech = (
 
   const speakChunk = useCallback(async (index: number) => {
     const synth = synthRef.current;
-    if (!synth) return;
+    if (!synth && options.engine === 'browser') return;
     if (index >= chunksRef.current.length) {
       setState(prev => ({ ...prev, isPlaying: false, isPaused: false, progress: 1 }));
       return;
     }
 
-    // Cancel any ongoing speech
+    const chunk = chunksRef.current[index];
+
+    if (options.engine === 'azure') {
+      const config = options.azure;
+      if (!config) {
+        setState(prev => ({ ...prev, status: { level: 'error', message: 'Azure TTS is not configured.' } }));
+        return;
+      }
+
+      const region = (config.region || '').trim();
+      const key = (config.key || '').trim();
+      const voice = (config.voice || '').trim();
+
+      if (!region || !key || !voice) {
+        const missing = [
+          !region ? 'region' : null,
+          !key ? 'key' : null,
+          !voice ? 'voice' : null,
+        ].filter(Boolean).join(', ');
+        setState(prev => ({
+          ...prev,
+          status: { level: 'error', message: `Azure TTS requires region, key, and voice name. Missing: ${missing}.` }
+        }));
+        return;
+      }
+
+      abortRef.current?.abort();
+      abortRef.current = new AbortController();
+
+      const isChina = config.useChinaEndpoint;
+      const tokenUrl = isChina
+        ? `https://${region}.api.cognitive.azure.cn/sts/v1.0/issueToken`
+        : `https://${region}.api.cognitive.microsoft.com/sts/v1.0/issueToken`;
+
+      const ttsUrl = isChina
+        ? `https://${region}.tts.speech.azure.cn/cognitiveservices/v1`
+        : `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
+
+      const ssml = `<?xml version="1.0" encoding="utf-8"?>
+<speak version="1.0" xml:lang="${voice.split('-').slice(0, 2).join('-')}">
+  <voice name="${voice}">${chunk.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</voice>
+</speak>`;
+
+      setState(prev => ({ ...prev, status: { level: 'info', message: 'Requesting Azure TTS...' } }));
+
+      try {
+        const tokenResp = await fetch(tokenUrl, {
+          method: 'POST',
+          headers: {
+            'Ocp-Apim-Subscription-Key': key,
+          },
+          signal: abortRef.current.signal,
+        });
+
+        if (!tokenResp.ok) {
+          throw new Error(`Token request failed: ${tokenResp.status}`);
+        }
+
+        const token = await tokenResp.text();
+        const audioResp = await fetch(ttsUrl, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/ssml+xml',
+            'X-Microsoft-OutputFormat': config.outputFormat,
+            'User-Agent': 'txt-voice-reader',
+          },
+          body: ssml,
+          signal: abortRef.current.signal,
+        });
+
+        if (!audioResp.ok) {
+          throw new Error(`TTS request failed: ${audioResp.status}`);
+        }
+
+        const audioBuffer = await audioResp.arrayBuffer();
+        const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+        const url = URL.createObjectURL(blob);
+
+        if (!audioRef.current) {
+          audioRef.current = new Audio();
+        }
+
+        const audio = audioRef.current;
+        audio.src = url;
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          const nextIndex = index + 1;
+          if (nextIndex < chunksRef.current.length) {
+            setState(prev => ({
+              ...prev,
+              currentChunkIndex: nextIndex,
+              progress: nextIndex / chunksRef.current.length,
+              status: { level: 'idle', message: '' },
+            }));
+            speakChunk(nextIndex);
+          } else {
+            setState(prev => ({ ...prev, isPlaying: false, isPaused: false, progress: 1, status: { level: 'idle', message: '' } }));
+            if (onProgressUpdate) {
+              onProgressUpdate(chunksRef.current.length, chunksRef.current.length);
+            }
+          }
+        };
+
+        await audio.play();
+      } catch (error: any) {
+        if (error?.name === 'AbortError') return;
+        console.error('Azure TTS error', error);
+        setState(prev => ({
+          ...prev,
+          isPlaying: false,
+          isPaused: false,
+          status: { level: 'error', message: 'Azure TTS failed. Check region/key/voice.' }
+        }));
+      }
+
+      return;
+    }
+
+    // Web Speech API
     synth.cancel();
 
-    const chunk = chunksRef.current[index];
     const currentVoice = paramsRef.current.selectedVoice;
-
-    // Use Web Speech API
     const utterance = new SpeechSynthesisUtterance(chunk);
     utteranceRef.current = utterance;
 
@@ -154,19 +294,17 @@ export const useSpeech = (
     utterance.volume = paramsRef.current.volume;
 
     utterance.onend = () => {
-      // Automatically play next chunk
       const nextIndex = index + 1;
       if (nextIndex < chunksRef.current.length) {
-        setState(prev => ({ 
-          ...prev, 
+        setState(prev => ({
+          ...prev,
           currentChunkIndex: nextIndex,
-          progress: nextIndex / chunksRef.current.length 
+          progress: nextIndex / chunksRef.current.length
         }));
-        
+
         speakChunk(nextIndex);
       } else {
         setState(prev => ({ ...prev, isPlaying: false, isPaused: false, progress: 1 }));
-        // Notify completion
         if (onProgressUpdate) {
           onProgressUpdate(chunksRef.current.length, chunksRef.current.length);
         }
@@ -178,7 +316,7 @@ export const useSpeech = (
     };
 
     synth.speak(utterance);
-  }, [onProgressUpdate]);
+  }, [onProgressUpdate, options.engine, options.azure]);
 
   // Debounced restart when parameters change
   useEffect(() => {
@@ -193,37 +331,57 @@ export const useSpeech = (
 
   const speak = useCallback(() => {
     const synth = synthRef.current;
-    if (!synth) return;
+    if (options.engine === 'browser' && !synth) return;
     if (state.isPaused) {
       // Resume
-      synth.resume();
+      if (options.engine === 'browser') {
+        synth.resume();
+      } else if (audioRef.current) {
+        audioRef.current.play();
+      }
       setState((prev) => ({ ...prev, isPlaying: true, isPaused: false }));
       return;
     }
 
     if (state.isPlaying) {
-      synth.cancel();
+      if (options.engine === 'browser') {
+        synth.cancel();
+      } else if (audioRef.current) {
+        audioRef.current.pause();
+      }
     }
 
     setState(prev => ({ ...prev, isPlaying: true, isPaused: false }));
     speakChunk(state.currentChunkIndex);
-  }, [state.isPaused, state.isPlaying, state.currentChunkIndex, speakChunk]);
+  }, [state.isPaused, state.isPlaying, state.currentChunkIndex, speakChunk, options.engine]);
 
   const pause = useCallback(() => {
     const synth = synthRef.current;
-    if (!synth) return;
+    if (options.engine === 'browser' && !synth) return;
     if (state.isPlaying) {
-      synth.pause();
+      if (options.engine === 'browser') {
+        synth.pause();
+      } else if (audioRef.current) {
+        audioRef.current.pause();
+      }
       setState((prev) => ({ ...prev, isPlaying: false, isPaused: true }));
     }
-  }, [state.isPlaying]);
+  }, [state.isPlaying, options.engine]);
 
   const stop = useCallback(() => {
     const synth = synthRef.current;
-    if (!synth) return;
-    synth.cancel();
+    if (options.engine === 'browser') {
+      if (!synth) return;
+      synth.cancel();
+    } else {
+      abortRef.current?.abort();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+    }
     setState((prev) => ({ ...prev, isPlaying: false, isPaused: false }));
-  }, []);
+  }, [options.engine]);
 
   const skipForward = useCallback(() => {
     if (state.currentChunkIndex < chunksRef.current.length - 1) {
@@ -277,6 +435,7 @@ export const useSpeech = (
   useEffect(() => {
     return () => {
       if (synthRef.current) synthRef.current.cancel();
+      abortRef.current?.abort();
     };
   }, []);
 
@@ -293,6 +452,7 @@ export const useSpeech = (
     setPitch,
     setVolume,
     jumpTo,
+    status: state.status,
   }), [
     state,
     speak,
@@ -305,5 +465,6 @@ export const useSpeech = (
     setPitch,
     setVolume,
     jumpTo,
+    state.status,
   ]);
 };

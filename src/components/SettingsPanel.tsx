@@ -1,7 +1,8 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useState } from 'react';
 import { Settings, X, Volume2, Mic, Globe, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { translations, Language } from '../i18n';
+import type { AzureTtsConfig, TtsEngine } from '../hooks/useSpeech';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -9,6 +10,10 @@ interface SettingsPanelProps {
   voices: SpeechSynthesisVoice[];
   selectedVoice: SpeechSynthesisVoice | null;
   onVoiceChange: (voice: SpeechSynthesisVoice) => void;
+  ttsEngine: TtsEngine;
+  onTtsEngineChange: (engine: TtsEngine) => void;
+  azureConfig: AzureTtsConfig;
+  onAzureConfigChange: (config: AzureTtsConfig) => void;
   rate: number;
   onRateChange: (rate: number) => void;
   pitch: number;
@@ -21,6 +26,10 @@ interface SettingsPanelProps {
   onThemeChange: (theme: 'light' | 'dark' | 'sepia') => void;
   language: Language;
   onLanguageChange: (lang: Language) => void;
+  status?: {
+    level: 'idle' | 'info' | 'error';
+    message: string;
+  };
 }
 
 export const SettingsPanel = React.memo(({
@@ -29,6 +38,10 @@ export const SettingsPanel = React.memo(({
   voices,
   selectedVoice,
   onVoiceChange,
+  ttsEngine,
+  onTtsEngineChange,
+  azureConfig,
+  onAzureConfigChange,
   rate,
   onRateChange,
   pitch,
@@ -41,8 +54,11 @@ export const SettingsPanel = React.memo(({
   onThemeChange,
   language,
   onLanguageChange,
+  status,
 }: SettingsPanelProps) => {
   const t = translations[language];
+  const [azureVoices, setAzureVoices] = useState<{ shortName: string; locale: string; localName?: string; gender?: string }[]>([]);
+  const [azureVoiceStatus, setAzureVoiceStatus] = useState<'idle' | 'loading' | 'error'>('idle');
 
   const getLanguageName = (langCode: string) => {
     try {
@@ -70,6 +86,80 @@ export const SettingsPanel = React.memo(({
       return a.localeCompare(b);
     });
   }, [voices, language]);
+
+  useEffect(() => {
+    if (ttsEngine !== 'azure') return;
+    if (!azureConfig.region || !azureConfig.key) {
+      setAzureVoices([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    const isChina = azureConfig.useChinaEndpoint;
+    const endpoint = isChina
+      ? `https://${azureConfig.region}.tts.speech.azure.cn/cognitiveservices/voices/list`
+      : `https://${azureConfig.region}.tts.speech.microsoft.com/cognitiveservices/voices/list`;
+
+    setAzureVoiceStatus('loading');
+    fetch(endpoint, {
+      headers: {
+        'Ocp-Apim-Subscription-Key': azureConfig.key,
+      },
+      signal: controller.signal,
+    })
+      .then(async (resp) => {
+        if (!resp.ok) {
+          throw new Error(`Voice list failed: ${resp.status}`);
+        }
+        const data = await resp.json();
+        const mapped = Array.isArray(data)
+          ? data.map((v: any) => ({
+              shortName: String(v.ShortName || v.shortName || ''),
+              locale: String(v.Locale || v.locale || ''),
+              localName: v.LocalName || v.localName,
+              gender: v.Gender || v.gender,
+            })).filter((v: any) => v.shortName)
+          : [];
+        setAzureVoices(mapped);
+        setAzureVoiceStatus('idle');
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setAzureVoiceStatus('error');
+        }
+      });
+
+    return () => controller.abort();
+  }, [ttsEngine, azureConfig.region, azureConfig.key, azureConfig.useChinaEndpoint]);
+
+  const azureOutputFormats = [
+    { value: 'audio-24khz-48kbitrate-mono-mp3', label: t.azureFormatBalanced },
+    { value: 'audio-24khz-160kbitrate-mono-mp3', label: t.azureFormatHigh },
+    { value: 'audio-16khz-32kbitrate-mono-mp3', label: t.azureFormatLow },
+    { value: 'audio-48khz-192kbitrate-mono-mp3', label: t.azureFormatUltra },
+    { value: 'riff-24khz-16bit-mono-pcm', label: t.azureFormatPcm24k },
+    { value: 'riff-16khz-16bit-mono-pcm', label: t.azureFormatPcm16k },
+    { value: 'raw-16khz-16bit-mono-pcm', label: t.azureFormatRaw16k },
+  ];
+
+  const groupedAzureVoices = useMemo(() => {
+    const groups: Record<string, { shortName: string; locale: string; localName?: string; gender?: string }[]> = {};
+    azureVoices.forEach((voice) => {
+      if (!groups[voice.locale]) groups[voice.locale] = [];
+      groups[voice.locale].push(voice);
+    });
+    return Object.entries(groups).sort(([a], [b]) => {
+      const aIsZh = a.startsWith('zh');
+      const bIsZh = b.startsWith('zh');
+      if (aIsZh && !bIsZh) return -1;
+      if (!aIsZh && bIsZh) return 1;
+      const aIsCurrent = a.startsWith(language);
+      const bIsCurrent = b.startsWith(language);
+      if (aIsCurrent && !bIsCurrent) return -1;
+      if (!aIsCurrent && bIsCurrent) return 1;
+      return a.localeCompare(b);
+    });
+  }, [azureVoices, language]);
 
   return (
     <AnimatePresence>
@@ -120,6 +210,148 @@ export const SettingsPanel = React.memo(({
             </div>
 
             <div className="space-y-10">
+              {/* TTS Engine */}
+              <div className="space-y-4">
+                <label className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-50">
+                  <Volume2 className="w-3.5 h-3.5" />
+                  {t.ttsEngine}
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  {[
+                    { id: 'browser', label: t.engineBrowser },
+                    { id: 'azure', label: t.engineAzure }
+                  ].map((engine) => (
+                    <button
+                      key={engine.id}
+                      onClick={() => onTtsEngineChange(engine.id as TtsEngine)}
+                      className={`py-3 px-4 rounded-2xl text-sm font-bold transition-all border-2 ${
+                        ttsEngine === engine.id
+                          ? theme === 'dark'
+                            ? 'bg-indigo-600 border-indigo-500 text-white shadow-lg shadow-indigo-600/20'
+                            : theme === 'sepia'
+                              ? 'bg-[#5b4636] border-[#5b4636] text-[#f4ecd8]'
+                              : 'bg-slate-900 border-slate-900 text-white shadow-lg shadow-slate-900/20'
+                          : theme === 'dark'
+                            ? 'bg-slate-900/50 border-white/5 text-slate-400 hover:border-white/10 hover:text-slate-200'
+                            : theme === 'sepia'
+                              ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636]/70 hover:border-[#5b4636]/40'
+                              : 'bg-slate-50 border-slate-200 text-slate-600 hover:border-slate-300 hover:text-slate-900'
+                      }`}
+                    >
+                      {engine.label}
+                    </button>
+                  ))}
+                </div>
+
+                {ttsEngine === 'azure' && (
+                  <div className={`space-y-4 p-4 rounded-2xl border ${
+                    theme === 'dark'
+                      ? 'bg-slate-900/50 border-white/5'
+                      : theme === 'sepia'
+                        ? 'bg-[#f4ecd8]/60 border-[#5b4636]/20'
+                        : 'bg-slate-50 border-slate-200'
+                  }`}>
+                    <p className="text-xs opacity-70">
+                      {t.azureHint}
+                    </p>
+
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureRegion}</label>
+                      <input
+                        type="text"
+                        value={azureConfig.region}
+                        onChange={(e) => onAzureConfigChange({ ...azureConfig, region: e.target.value })}
+                        placeholder="eastasia"
+                        className={`w-full px-4 py-3 rounded-xl border text-sm outline-none ${
+                          theme === 'dark'
+                            ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
+                            : theme === 'sepia'
+                              ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
+                              : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
+                        }`}
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureKey}</label>
+                      <input
+                        type="password"
+                        value={azureConfig.key}
+                        onChange={(e) => onAzureConfigChange({ ...azureConfig, key: e.target.value })}
+                        placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                        className={`w-full px-4 py-3 rounded-xl border text-sm outline-none ${
+                          theme === 'dark'
+                            ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
+                            : theme === 'sepia'
+                              ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
+                              : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
+                        }`}
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureVoice}</label>
+                      <input
+                        type="text"
+                        value={azureConfig.voice}
+                        onChange={(e) => onAzureConfigChange({ ...azureConfig, voice: e.target.value })}
+                        placeholder="zh-CN-XiaoxiaoNeural"
+                        className={`w-full px-4 py-3 rounded-xl border text-sm outline-none ${
+                          theme === 'dark'
+                            ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
+                            : theme === 'sepia'
+                              ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
+                              : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
+                        }`}
+                      />
+                    </div>
+
+                    <div className="space-y-3">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureOutputFormat}</label>
+                      <select
+                        value={azureConfig.outputFormat}
+                        onChange={(e) => onAzureConfigChange({ ...azureConfig, outputFormat: e.target.value })}
+                        className={`w-full px-4 py-3 rounded-xl border text-sm outline-none appearance-none cursor-pointer ${
+                          theme === 'dark'
+                            ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
+                            : theme === 'sepia'
+                              ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
+                              : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
+                        }`}
+                      >
+                        {azureOutputFormats.map((format) => (
+                          <option key={format.value} value={format.value} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
+                            {format.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <label className="flex items-center gap-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={azureConfig.useChinaEndpoint}
+                        onChange={(e) => onAzureConfigChange({ ...azureConfig, useChinaEndpoint: e.target.checked })}
+                        className="h-4 w-4"
+                      />
+                      <span className="opacity-80">{t.azureChinaEndpoint}</span>
+                    </label>
+
+                    {status?.message && (
+                      <div className={`text-xs font-medium ${
+                        status.level === 'error'
+                          ? 'text-red-400'
+                          : status.level === 'info'
+                            ? 'text-amber-400'
+                            : 'opacity-60'
+                      }`}>
+                        {status.message}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Language Selection */}
               <div className="space-y-4">
                 <label className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] opacity-50`}>
@@ -161,34 +393,64 @@ export const SettingsPanel = React.memo(({
                   {t.voice}
                 </label>
                 <div className="relative group">
-                  <select
-                    value={selectedVoice?.voiceURI || ''}
-                    onChange={(e) => {
-                      const voice = voices.find((v) => v.voiceURI === e.target.value);
-                      if (voice) onVoiceChange(voice);
-                    }}
-                    className={`w-full p-4 pr-10 border-2 rounded-2xl text-sm font-medium outline-none transition-all appearance-none cursor-pointer ${
-                      theme === 'dark' 
-                        ? 'bg-slate-900/50 border-white/5 text-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10' 
-                        : theme === 'sepia' 
-                          ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636] focus:ring-4 focus:ring-[#5b4636]/5' 
-                          : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-600/5'
-                    }`}
-                  >
-                    {groupedVoices.map(([lang, langVoices]) => (
-                      <optgroup key={lang} label={getLanguageName(lang)} className={theme === 'dark' ? 'bg-slate-950 text-slate-400' : ''}>
-                        {langVoices.map((voice) => (
-                          <option key={voice.voiceURI} value={voice.voiceURI} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
-                            {voice.name}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
+                  {ttsEngine === 'azure' ? (
+                    <select
+                      value={azureConfig.voice}
+                      onChange={(e) => onAzureConfigChange({ ...azureConfig, voice: e.target.value })}
+                      className={`w-full p-4 pr-10 border-2 rounded-2xl text-sm font-medium outline-none transition-all appearance-none cursor-pointer ${
+                        theme === 'dark' 
+                          ? 'bg-slate-900/50 border-white/5 text-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10' 
+                          : theme === 'sepia' 
+                            ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636] focus:ring-4 focus:ring-[#5b4636]/5' 
+                            : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-600/5'
+                      }`}
+                    >
+                      {groupedAzureVoices.length === 0 && (
+                        <option value="">{azureVoiceStatus === 'loading' ? t.azureVoiceLoading : t.azureVoiceEmpty}</option>
+                      )}
+                      {groupedAzureVoices.map(([locale, localeVoices]) => (
+                        <optgroup key={locale} label={getLanguageName(locale)} className={theme === 'dark' ? 'bg-slate-950 text-slate-400' : ''}>
+                          {localeVoices.map((voice) => (
+                            <option key={voice.shortName} value={voice.shortName} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
+                              {voice.localName || voice.shortName}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  ) : (
+                    <select
+                      value={selectedVoice?.voiceURI || ''}
+                      onChange={(e) => {
+                        const voice = voices.find((v) => v.voiceURI === e.target.value);
+                        if (voice) onVoiceChange(voice);
+                      }}
+                      className={`w-full p-4 pr-10 border-2 rounded-2xl text-sm font-medium outline-none transition-all appearance-none cursor-pointer ${
+                        theme === 'dark' 
+                          ? 'bg-slate-900/50 border-white/5 text-slate-200 focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10' 
+                          : theme === 'sepia' 
+                            ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636] focus:ring-4 focus:ring-[#5b4636]/5' 
+                            : 'bg-slate-50 border-slate-200 text-slate-900 focus:border-indigo-600 focus:ring-4 focus:ring-indigo-600/5'
+                      }`}
+                    >
+                      {groupedVoices.map(([lang, langVoices]) => (
+                        <optgroup key={lang} label={getLanguageName(lang)} className={theme === 'dark' ? 'bg-slate-950 text-slate-400' : ''}>
+                          {langVoices.map((voice) => (
+                            <option key={voice.voiceURI} value={voice.voiceURI} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
+                              {voice.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      ))}
+                    </select>
+                  )}
                   <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none opacity-40">
                     <ChevronLeft className="w-4 h-4 -rotate-90" />
                   </div>
                 </div>
+                {ttsEngine === 'azure' && azureVoiceStatus === 'error' && (
+                  <div className="text-xs text-red-400">{t.azureVoiceError}</div>
+                )}
               </div>
 
               {/* Controls Grid */}

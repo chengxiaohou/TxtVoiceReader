@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Reader } from './components/Reader';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Library } from './components/Library';
-import { useSpeech } from './hooks/useSpeech';
+import { useSpeech, AzureTtsConfig, TtsEngine } from './hooks/useSpeech';
 import { Settings, Play, Pause, ChevronLeft, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { addBook, updateProgress, getBook, Book } from './utils/db';
@@ -11,8 +11,14 @@ import { translations, Language } from './i18n';
 type Theme = 'light' | 'dark' | 'sepia';
 type View = 'library' | 'reader';
 const LAST_READING_BOOK_KEY = 'txt-voice-reader-last-reading-book-id-v1';
+const AZURE_TTS_CONFIG_KEY = 'txt-voice-reader-azure-tts-config-v1';
 
 export default function App() {
+  const envRegion = (import.meta as any).env?.VITE_AZURE_REGION || '';
+  const envKey = (import.meta as any).env?.VITE_AZURE_KEY || '';
+  const envVoice = (import.meta as any).env?.VITE_AZURE_VOICE || '';
+  const envOutputFormat = (import.meta as any).env?.VITE_AZURE_OUTPUT_FORMAT || '';
+  const envUseChina = (import.meta as any).env?.VITE_AZURE_USE_CHINA_ENDPOINT === 'true';
   const [currentBook, setCurrentBook] = useState<Book | null>(null);
   const [view, setView] = useState<View>('library');
   const [isOpeningBook, setIsOpeningBook] = useState(false);
@@ -23,6 +29,16 @@ export default function App() {
   const [fontSize, setFontSize] = useState(18);
   const [theme, setTheme] = useState<Theme>('dark');
   const [language, setLanguage] = useState<Language>('zh');
+  const [ttsEngine, setTtsEngine] = useState<TtsEngine>('azure');
+  const [azureConfig, setAzureConfig] = useState<AzureTtsConfig>({
+    enabled: true,
+    region: envRegion || 'eastasia',
+    key: envKey || '',
+    voice: envVoice || 'zh-CN-XiaoxiaoNeural',
+    outputFormat: envOutputFormat || 'audio-24khz-48kbitrate-mono-mp3',
+    useChinaEndpoint: envUseChina || false,
+  });
+  const [isAzureConfigHydrated, setIsAzureConfigHydrated] = useState(false);
 
   const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
 
@@ -87,7 +103,11 @@ export default function App() {
   } = useSpeech(
     currentBook?.content || '', 
     currentBook?.progress || 0,
-    handleProgressUpdate
+    handleProgressUpdate,
+    {
+      engine: ttsEngine,
+      azure: azureConfig,
+    }
   );
 
   const handleImportBook = async (text: string, name: string) => {
@@ -225,6 +245,44 @@ export default function App() {
     }
   }, [theme]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(AZURE_TTS_CONFIG_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as AzureTtsConfig & { engine?: TtsEngine };
+      if (parsed) {
+        setAzureConfig({
+          enabled: Boolean(parsed.enabled),
+          region: parsed.region || envRegion || 'eastasia',
+          key: parsed.key || envKey || '',
+          voice: parsed.voice || envVoice || 'zh-CN-XiaoxiaoNeural',
+          outputFormat: parsed.outputFormat || envOutputFormat || 'audio-24khz-48kbitrate-mono-mp3',
+          useChinaEndpoint: parsed.useChinaEndpoint ?? envUseChina ?? false,
+        });
+        if (parsed.engine === 'browser' || parsed.engine === 'azure') {
+          setTtsEngine(parsed.engine);
+        }
+      }
+    } catch {
+      // no-op
+    }
+    setIsAzureConfigHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!isAzureConfigHydrated) return;
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(AZURE_TTS_CONFIG_KEY, JSON.stringify({
+        ...azureConfig,
+        engine: ttsEngine,
+      }));
+    } catch {
+      // no-op
+    }
+  }, [azureConfig, ttsEngine, isAzureConfigHydrated]);
+
   // Flush latest highlighted chunk progress when app is backgrounded/closed.
   useEffect(() => {
     if (!currentBook || totalChunks <= 0) return;
@@ -274,7 +332,7 @@ export default function App() {
             <BookOpen className="w-5 h-5 opacity-80" />
             <h1 className="font-semibold text-lg truncate max-w-[150px] sm:max-w-md flex items-baseline gap-2">
               <span>{currentBook?.title || '随身听'}</span>
-              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.14</span>}
+              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.19</span>}
             </h1>
           </div>
         </div>
@@ -498,6 +556,13 @@ export default function App() {
         voices={voices}
         selectedVoice={selectedVoice}
         onVoiceChange={setVoice}
+        ttsEngine={ttsEngine}
+        onTtsEngineChange={(engine) => {
+          setTtsEngine(engine);
+          setAzureConfig((prev) => ({ ...prev, enabled: engine === 'azure' }));
+        }}
+        azureConfig={azureConfig}
+        onAzureConfigChange={setAzureConfig}
         rate={rate}
         onRateChange={setRate}
         pitch={pitch}
