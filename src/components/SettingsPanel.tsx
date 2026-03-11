@@ -142,19 +142,11 @@ export const SettingsPanel = React.memo(({
     { value: 'raw-16khz-16bit-mono-pcm', label: t.azureFormatRaw16k },
   ];
 
-  const paragraphGapOptions = [
-    { value: 0, label: t.paragraphGapStandard },
-    { value: -320, label: t.paragraphGapLateOption.replace('{ms}', '320') },
-    { value: -240, label: t.paragraphGapLateOption.replace('{ms}', '240') },
-    { value: -180, label: t.paragraphGapLateOption.replace('{ms}', '180') },
-    { value: -120, label: t.paragraphGapLateOption.replace('{ms}', '120') },
-    { value: -80, label: t.paragraphGapLateOption.replace('{ms}', '80') },
-    { value: 80, label: t.paragraphGapEarlyOption.replace('{ms}', '80') },
-    { value: 120, label: t.paragraphGapEarlyOption.replace('{ms}', '120') },
-    { value: 180, label: t.paragraphGapEarlyOption.replace('{ms}', '180') },
-    { value: 240, label: t.paragraphGapEarlyOption.replace('{ms}', '240') },
-    { value: 320, label: t.paragraphGapEarlyOption.replace('{ms}', '320') },
-  ];
+  const formatGapLabel = (value: number) => {
+    if (value === 0) return t.paragraphGapStandard;
+    if (value > 0) return t.paragraphGapEarlyOption.replace('{ms}', String(value));
+    return t.paragraphGapLateOption.replace('{ms}', String(Math.abs(value)));
+  };
 
   const groupedAzureVoices = useMemo(() => {
     const groups: Record<string, { shortName: string; locale: string; localName?: string; gender?: string }[]> = {};
@@ -360,29 +352,56 @@ export const SettingsPanel = React.memo(({
                   ))}
                 </div>
 
-                {ttsEngine === 'azure' && (
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.paragraphGap}</label>
-                    <select
-                      value={String(azureConfig.overlapEnabled ? azureConfig.overlapMs : 0)}
-                      onChange={(e) => {
-                        const nextValue = parseInt(e.target.value, 10) || 0;
-                        onAzureConfigChange({ ...azureConfig, overlapMs: nextValue, overlapEnabled: nextValue !== 0 });
-                      }}
-                      className={`w-full px-4 py-3 rounded-xl border text-sm outline-none appearance-none cursor-pointer ${
-                        theme === 'dark'
-                          ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
-                          : theme === 'sepia'
-                            ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
-                            : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
+                <div className="space-y-4">
+                  <div className="flex justify-between items-end">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.pitch}</label>
+                    <span className="text-sm font-mono font-bold">{pitch}</span>
+                  </div>
+                  <div className="relative flex items-center h-6">
+                    <input
+                      type="range"
+                      min={0.5}
+                      max={2}
+                      step={0.1}
+                      value={pitch}
+                      onChange={(e) => onPitchChange(parseFloat(e.target.value))}
+                      className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
+                        theme === 'dark' 
+                          ? 'bg-slate-800 accent-indigo-500' 
+                          : theme === 'sepia' 
+                            ? 'bg-[#5b4636]/10 accent-[#5b4636]' 
+                            : 'bg-slate-200 accent-indigo-600'
                       }`}
-                    >
-                      {paragraphGapOptions.map((option) => (
-                        <option key={option.value} value={String(option.value)} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
+                    />
+                  </div>
+                </div>
+
+                {ttsEngine === 'azure' && (
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-end">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.paragraphGap}</label>
+                      <span className="text-sm font-mono font-bold">{formatGapLabel(azureConfig.overlapEnabled ? azureConfig.overlapMs : 0)}</span>
+                    </div>
+                    <div className="relative flex items-center h-6">
+                      <input
+                        type="range"
+                        min={-320}
+                        max={320}
+                        step={20}
+                        value={azureConfig.overlapEnabled ? azureConfig.overlapMs : 0}
+                        onChange={(e) => {
+                          const nextValue = parseInt(e.target.value, 10) || 0;
+                          onAzureConfigChange({ ...azureConfig, overlapMs: nextValue, overlapEnabled: nextValue !== 0 });
+                        }}
+                        className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
+                          theme === 'dark' 
+                            ? 'bg-slate-800 accent-indigo-500' 
+                            : theme === 'sepia' 
+                              ? 'bg-[#5b4636]/10 accent-[#5b4636]' 
+                              : 'bg-slate-200 accent-indigo-600'
+                        }`}
+                      />
+                    </div>
                   </div>
                 )}
               </div>
@@ -586,30 +605,6 @@ export const SettingsPanel = React.memo(({
                     />
                     <span className="opacity-80">{t.azureChinaEndpoint}</span>
                   </label>
-
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-end">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.pitch}</label>
-                      <span className="text-sm font-mono font-bold">{pitch}</span>
-                    </div>
-                    <div className="relative flex items-center h-6">
-                      <input
-                        type="range"
-                        min={0.5}
-                        max={2}
-                        step={0.1}
-                        value={pitch}
-                        onChange={(e) => onPitchChange(parseFloat(e.target.value))}
-                        className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
-                          theme === 'dark' 
-                            ? 'bg-slate-800 accent-indigo-500' 
-                            : theme === 'sepia' 
-                              ? 'bg-[#5b4636]/10 accent-[#5b4636]' 
-                              : 'bg-slate-200 accent-indigo-600'
-                        }`}
-                      />
-                    </div>
-                  </div>
 
                   {status?.message && (
                     <div className={`text-xs font-medium ${
