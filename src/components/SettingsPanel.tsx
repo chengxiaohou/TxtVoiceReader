@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useRef } from 'react';
 import { Settings, X, Volume2, Mic, Globe, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { translations, Language } from '../i18n';
@@ -59,6 +59,8 @@ export const SettingsPanel = React.memo(({
   status,
 }: SettingsPanelProps) => {
   const t = translations[language];
+  const panelRef = useRef<HTMLDivElement | null>(null);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
   const [azureVoices, setAzureVoices] = useState<{ shortName: string; locale: string; localName?: string; gender?: string }[]>([]);
   const [azureVoiceStatus, setAzureVoiceStatus] = useState<'idle' | 'loading' | 'error'>('idle');
   const guardActivation = (event?: React.SyntheticEvent) => {
@@ -180,6 +182,52 @@ export const SettingsPanel = React.memo(({
 
   const clampValue = (value: number, min: number, max: number) => Math.min(max, Math.max(min, value));
 
+  useEffect(() => {
+    if (isOpen) {
+      lastFocusedRef.current = document.activeElement as HTMLElement | null;
+      panelRef.current?.focus();
+    } else if (lastFocusedRef.current) {
+      lastFocusedRef.current.focus();
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const panel = panelRef.current;
+    if (!panel) return;
+
+    const getFocusable = () =>
+      Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
+      ).filter((el) => !el.hasAttribute('disabled') && !el.getAttribute('aria-hidden'));
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const focusables = getFocusable();
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (event.shiftKey) {
+        if (document.activeElement === first || !panel.contains(document.activeElement)) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last || !panel.contains(document.activeElement)) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+
+    panel.addEventListener('keydown', onKeyDown);
+    return () => {
+      panel.removeEventListener('keydown', onKeyDown);
+    };
+  }, [isOpen]);
+
   return (
     <AnimatePresence>
       {isOpen && (
@@ -206,6 +254,8 @@ export const SettingsPanel = React.memo(({
             role="dialog"
             aria-modal="true"
             aria-labelledby="settings-title"
+            tabIndex={-1}
+            ref={panelRef}
           >
             <div className={`sticky top-0 z-20 -mx-8 px-8 pt-8 pb-6 flex items-center justify-between backdrop-blur-xl shadow-sm ${
               theme === 'dark' 

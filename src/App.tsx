@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Reader } from './components/Reader';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Library } from './components/Library';
@@ -10,8 +10,11 @@ import { translations, Language } from './i18n';
 
 type Theme = 'light' | 'dark' | 'sepia';
 type View = 'library' | 'reader';
+type ActivationStage = 'required' | 'voices' | 'done';
+type AzureVoice = { shortName: string; locale: string; localName?: string; gender?: string };
 const LAST_READING_BOOK_KEY = 'txt-voice-reader-last-reading-book-id-v1';
 const AZURE_TTS_CONFIG_KEY = 'txt-voice-reader-azure-tts-config-v1';
+const ACTIVATION_VOICE_CONFIRMED_KEY = 'txt-voice-reader-activation-voice-confirmed-v1';
 
 export default function App() {
   const envRegion = (import.meta as any).env?.VITE_AZURE_REGION || '';
@@ -43,22 +46,29 @@ export default function App() {
   const [isAzureConfigHydrated, setIsAzureConfigHydrated] = useState(false);
 
   const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
-  const [isActivationModalOpen, setIsActivationModalOpen] = useState(false);
-  const [activationInput, setActivationInput] = useState('');
-  const activationPromptedRef = useRef(false);
+  const [activationStage, setActivationStage] = useState<ActivationStage>('done');
+  const [activationKeyInput, setActivationKeyInput] = useState('');
+  const [activationVoices, setActivationVoices] = useState<AzureVoice[]>([]);
+  const [activationStatus, setActivationStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [activationError, setActivationError] = useState('');
+  const [activationSkipped, setActivationSkipped] = useState(false);
+  const [previewStatus, setPreviewStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [previewError, setPreviewError] = useState('');
+  const [activationVoiceConfirmed, setActivationVoiceConfirmed] = useState(false);
+  const previewAudioRef = useRef<HTMLAudioElement | null>(null);
+  const previewAbortRef = useRef<AbortController | null>(null);
 
   const t = translations[language];
 
-  const isActivationMissing = ttsEngine === 'azure' && !azureConfig.key.trim();
+  const hasActivation = Boolean(azureConfig.key.trim());
+  const hasActivationVoice = activationVoiceConfirmed && Boolean(azureConfig.voice.trim());
+  const isActivationMissing = !hasActivation;
   const requireActivationCode = useCallback(() => {
-    if (!isActivationMissing) return true;
+    if (ttsEngine !== 'azure' || hasActivation) return true;
     setIsSettingsOpen(false);
-    window.setTimeout(() => {
-      setIsActivationModalOpen(true);
-    }, 0);
-    activationPromptedRef.current = true;
+    setActivationStage('required');
     return false;
-  }, [isActivationMissing]);
+  }, [hasActivation, ttsEngine]);
 
   const persistLastReadingBook = useCallback((bookId: string) => {
     if (typeof window === 'undefined') return;
@@ -205,6 +215,143 @@ export default function App() {
     }
   };
 
+  const getLanguageName = useCallback((langCode: string) => {
+    try {
+      const displayNames = new Intl.DisplayNames([language], { type: 'language' });
+      const name = displayNames.of(langCode.split('-')[0]);
+      return name ? `${name} (${langCode})` : langCode;
+    } catch {
+      return langCode;
+    }
+  }, [language]);
+
+  const groupedActivationVoices = useMemo(() => {
+    const groups: Record<string, AzureVoice[]> = {};
+    activationVoices.forEach((voice) => {
+      const lang = voice.locale || 'und';
+      if (!groups[lang]) groups[lang] = [];
+      groups[lang].push(voice);
+    });
+    return Object.entries(groups).sort(([a], [b]) => a.localeCompare(b));
+  }, [activationVoices]);
+
+  const fetchAzureVoices = useCallback(async (key: string) => {
+    const region = (azureConfig.region || '').trim();
+    if (!region || !key.trim()) {
+      setActivationStatus('error');
+      setActivationError(t.activationFetchError);
+      return;
+    }
+
+    const endpoint = azureConfig.useChinaEndpoint
+      ? `https://${region}.tts.speech.azure.cn/cognitiveservices/voices/list`
+      : `https://${region}.tts.speech.microsoft.com/cognitiveservices/voices/list`;
+
+    setActivationStatus('loading');
+    setActivationError('');
+    try {
+      const resp = await fetch(endpoint, {
+        headers: {
+          'Ocp-Apim-Subscription-Key': key.trim(),
+        },
+      });
+      if (!resp.ok) {
+        throw new Error(`Voice list failed: ${resp.status}`);
+      }
+      const data = await resp.json();
+      const mapped = Array.isArray(data)
+        ? data.map((v: any) => ({
+            shortName: String(v.ShortName || v.shortName || ''),
+            locale: String(v.Locale || v.locale || ''),
+            localName: v.LocalName || v.localName,
+            gender: v.Gender || v.gender,
+          }))
+        : [];
+      if (mapped.length === 0) {
+        throw new Error('Voice list empty');
+      }
+      setActivationVoices(mapped);
+      setActivationStatus('idle');
+      setActivationStage('voices');
+    } catch (error) {
+      console.error('Activation voice fetch failed', error);
+      setActivationStatus('error');
+      setActivationError(t.activationFetchError);
+    }
+  }, [azureConfig.region, azureConfig.useChinaEndpoint, t.activationFetchError]);
+
+  const previewVoice = useCallback(async (voice: AzureVoice) => {
+    const region = (azureConfig.region || '').trim();
+    const key = (azureConfig.key || '').trim();
+    if (!region || !key || !voice?.shortName) {
+      setPreviewStatus('error');
+      setPreviewError(t.activationFetchError);
+      return;
+    }
+    const tokenUrl = azureConfig.useChinaEndpoint
+      ? `https://${region}.api.cognitive.azure.cn/sts/v1.0/issueToken`
+      : `https://${region}.api.cognitive.microsoft.com/sts/v1.0/issueToken`;
+    const ttsUrl = azureConfig.useChinaEndpoint
+      ? `https://${region}.tts.speech.azure.cn/cognitiveservices/v1`
+      : `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
+
+    previewAbortRef.current?.abort();
+    previewAbortRef.current = new AbortController();
+    setPreviewStatus('loading');
+    setPreviewError('');
+    try {
+      const tokenResp = await fetch(tokenUrl, {
+        method: 'POST',
+        headers: {
+          'Ocp-Apim-Subscription-Key': key,
+        },
+        signal: previewAbortRef.current.signal,
+      });
+      if (!tokenResp.ok) {
+        throw new Error(`Token request failed: ${tokenResp.status}`);
+      }
+      const token = await tokenResp.text();
+      const sampleText = language === 'zh'
+        ? '你好，这是语音试听示例。'
+        : 'Hello, this is a voice preview sample.';
+      const audioResp = await fetch(ttsUrl, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/ssml+xml',
+          'X-Microsoft-OutputFormat': azureConfig.outputFormat,
+          'User-Agent': 'txt-voice-reader',
+        },
+        body: `<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<speak version=\"1.0\" xml:lang=\"${voice.locale}\">\n  <voice name=\"${voice.shortName}\">${sampleText.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</voice>\n</speak>`,
+        signal: previewAbortRef.current.signal,
+      });
+      if (!audioResp.ok) {
+        throw new Error(`TTS request failed: ${audioResp.status}`);
+      }
+      const audioBuffer = await audioResp.arrayBuffer();
+      const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+      const url = URL.createObjectURL(blob);
+      if (!previewAudioRef.current) {
+        previewAudioRef.current = new Audio();
+      }
+      previewAudioRef.current.src = url;
+      previewAudioRef.current.onended = () => {
+        URL.revokeObjectURL(url);
+        setPreviewStatus('idle');
+      };
+      previewAudioRef.current.play().catch(() => {
+        URL.revokeObjectURL(url);
+        setPreviewStatus('error');
+        setPreviewError(t.activationFetchError);
+      });
+    } catch (error) {
+      if ((error as any)?.name === 'AbortError') return;
+      console.error('Preview voice failed', error);
+      setPreviewStatus('error');
+      setPreviewError(t.activationFetchError);
+    }
+  }, [azureConfig.region, azureConfig.key, azureConfig.outputFormat, azureConfig.useChinaEndpoint, language, t.activationFetchError]);
+
   // Apply theme to body for overscroll colors
   useEffect(() => {
     let cancelled = false;
@@ -247,6 +394,8 @@ export default function App() {
 
   useEffect(() => {
     if (view !== 'reader') return;
+    if (isSettingsOpen) return;
+    if (activationStage !== 'done') return;
 
     const isTypingTarget = (target: EventTarget | null) => {
       const el = target as HTMLElement | null;
@@ -303,7 +452,7 @@ export default function App() {
       document.removeEventListener('keydown', onKeyDown, { capture: true } as any);
       document.removeEventListener('keyup', onKeyUp, { capture: true } as any);
     };
-  }, [view, handleTogglePlayback, skipBackward, skipForward]);
+  }, [view, handleTogglePlayback, skipBackward, skipForward, isSettingsOpen, activationStage]);
 
   useEffect(() => {
     const body = document.body;
@@ -348,6 +497,12 @@ export default function App() {
     } catch {
       // no-op
     }
+    try {
+      const confirmed = window.localStorage.getItem(ACTIVATION_VOICE_CONFIRMED_KEY);
+      setActivationVoiceConfirmed(confirmed === 'true');
+    } catch {
+      // no-op
+    }
     setIsAzureConfigHydrated(true);
   }, []);
 
@@ -366,22 +521,27 @@ export default function App() {
 
   useEffect(() => {
     if (!isAzureConfigHydrated) return;
-    if (!isActivationMissing) return;
-    activationPromptedRef.current = true;
-    setIsActivationModalOpen(true);
-  }, [isActivationMissing, isAzureConfigHydrated]);
+    try {
+      window.localStorage.setItem(ACTIVATION_VOICE_CONFIRMED_KEY, activationVoiceConfirmed ? 'true' : 'false');
+    } catch {
+      // no-op
+    }
+  }, [activationVoiceConfirmed, isAzureConfigHydrated]);
 
   useEffect(() => {
-    if (!isActivationMissing && isActivationModalOpen) {
-      setIsActivationModalOpen(false);
+    if (!isAzureConfigHydrated) return;
+    if (activationSkipped) {
+      setActivationStage('done');
+      return;
     }
-  }, [isActivationMissing, isActivationModalOpen]);
-
-  useEffect(() => {
-    if (isActivationModalOpen) {
-      setActivationInput(azureConfig.key || '');
+    if (hasActivation && hasActivationVoice) {
+      setActivationStage('done');
+      return;
     }
-  }, [isActivationModalOpen, azureConfig.key]);
+    if (activationStage === 'voices') return;
+    setActivationStage('required');
+    setActivationKeyInput(azureConfig.key || '');
+  }, [hasActivation, hasActivationVoice, activationSkipped, isAzureConfigHydrated, azureConfig.key, activationStage]);
 
   // Flush latest highlighted chunk progress when app is backgrounded/closed.
   useEffect(() => {
@@ -408,6 +568,169 @@ export default function App() {
     };
   }, [currentBook, currentChunkIndex, totalChunks, handleProgressUpdate]);
 
+  if (isAzureConfigHydrated && activationStage !== 'done') {
+    if (activationStage === 'required') {
+      return (
+        <div className={`min-h-screen flex items-center justify-center px-6 py-12 ${
+          theme === 'dark' ? 'bg-slate-950 text-slate-100' : theme === 'sepia' ? 'bg-[#f4ecd8] text-[#5b4636]' : 'bg-white text-slate-900'
+        }`}>
+          <div className={`w-full max-w-lg p-8 rounded-3xl border shadow-2xl ${
+            theme === 'dark'
+              ? 'bg-slate-900 border-slate-800'
+              : theme === 'sepia'
+                ? 'bg-[#f6efe0] border-[#eaddc5]'
+                : 'bg-white border-slate-200'
+          }`}>
+            <h1 className="text-2xl font-black mb-3">{t.activationTitle}</h1>
+            <p className="text-sm opacity-80 mb-6">{t.activationBody}</p>
+            <form
+              className="space-y-4"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (activationStatus === 'loading') return;
+                const nextKey = activationKeyInput.trim();
+                setActivationSkipped(false);
+                setActivationVoiceConfirmed(false);
+                setAzureConfig((prev) => ({ ...prev, key: nextKey, enabled: true }));
+                setTtsEngine('azure');
+                fetchAzureVoices(nextKey);
+              }}
+            >
+              <input
+                type="text"
+                value={activationKeyInput}
+                onChange={(e) => setActivationKeyInput(e.target.value)}
+                placeholder={t.activationInputPlaceholder}
+                className={`w-full px-4 py-3 rounded-xl border text-sm outline-none ${
+                  theme === 'dark'
+                    ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
+                    : theme === 'sepia'
+                      ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
+                      : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
+                }`}
+              />
+              {activationStatus === 'error' && (
+                <div className="text-xs text-red-400">{activationError}</div>
+              )}
+              <button
+                type="submit"
+                aria-disabled={activationStatus === 'loading' || !activationKeyInput.trim()}
+                className={`w-full px-4 py-3 rounded-xl font-bold transition-colors ${
+                  theme === 'sepia'
+                    ? 'bg-[#5b4636] text-[#f4ecd8]'
+                    : 'bg-indigo-600 text-white'
+                } ${
+                  activationStatus === 'loading' || !activationKeyInput.trim()
+                    ? 'opacity-50 cursor-not-allowed'
+                    : theme === 'sepia'
+                      ? 'hover:bg-[#4a382a]'
+                      : 'hover:bg-indigo-700'
+                }`}
+              >
+                <span className="inline-flex items-center justify-center gap-2">
+                  {activationStatus === 'loading' && (
+                    <span className="h-4 w-4 rounded-full border-2 border-transparent border-t-current animate-spin" />
+                  )}
+                  {activationStatus === 'loading'
+                    ? t.activationLoading
+                    : activationStatus === 'error'
+                      ? t.activationRetry
+                      : t.activationAction}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActivationStage('done');
+                  setActivationSkipped(true);
+                  setTtsEngine('browser');
+                }}
+                className="text-xs opacity-60 hover:opacity-90 transition-opacity"
+              >
+                {t.activationLater}
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className={`min-h-screen px-6 py-10 ${
+        theme === 'dark' ? 'bg-slate-950 text-slate-100' : theme === 'sepia' ? 'bg-[#f4ecd8] text-[#5b4636]' : 'bg-white text-slate-900'
+      }`}>
+        <div className="max-w-4xl mx-auto space-y-6">
+          <div>
+            <h1 className="text-2xl font-black mb-2">{t.activationVoiceTitle}</h1>
+            <p className="text-sm opacity-80">{t.activationVoiceHint}</p>
+            {previewStatus === 'error' && (
+              <div className="text-xs text-red-400 mt-2">{previewError}</div>
+            )}
+          </div>
+          {groupedActivationVoices.length === 0 ? (
+            <div className="text-sm opacity-70">
+              {t.activationFetchError}
+            </div>
+          ) : (
+            groupedActivationVoices.map(([locale, localeVoices]) => (
+              <div key={locale} className="space-y-3">
+                <h2 className="text-sm font-bold uppercase tracking-[0.15em] opacity-60">
+                  {getLanguageName(locale)}
+                </h2>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {localeVoices.map((voice) => (
+                    <div key={voice.shortName} className={`p-4 rounded-2xl border flex flex-col gap-3 ${
+                      theme === 'dark'
+                        ? 'bg-slate-900/60 border-white/5'
+                        : theme === 'sepia'
+                          ? 'bg-[#f6efe0] border-[#eaddc5]'
+                          : 'bg-slate-50 border-slate-200'
+                    }`}>
+                      <div>
+                        <div className="font-semibold">{voice.localName || voice.shortName}</div>
+                        <div className="text-xs opacity-60">{voice.shortName}</div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => previewVoice(voice)}
+                          className={`px-3 py-2 rounded-lg text-xs font-bold transition-colors ${
+                            theme === 'sepia'
+                              ? 'bg-[#5b4636]/10 text-[#5b4636] hover:bg-[#5b4636]/20'
+                              : 'bg-slate-900 text-white hover:bg-slate-800'
+                          }`}
+                        >
+                          {t.activationVoicePreview}
+                        </button>
+                        <button
+                          type="button"
+                        onClick={() => {
+                          setAzureConfig((prev) => ({ ...prev, key: azureConfig.key, voice: voice.shortName, enabled: true }));
+                          setTtsEngine('azure');
+                          setActivationSkipped(false);
+                          setActivationVoiceConfirmed(true);
+                          setActivationStage('done');
+                        }}
+                          className={`px-3 py-2 rounded-lg text-xs font-bold transition-colors ${
+                            theme === 'sepia'
+                              ? 'bg-[#5b4636] text-[#f4ecd8] hover:bg-[#4a382a]'
+                              : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                          }`}
+                        >
+                          {t.activationVoiceUse}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col">
       {/* Header */}
@@ -417,7 +740,7 @@ export default function App() {
           : theme === 'sepia' 
             ? 'bg-[#f4ecd8]/90 border-[#5b4636]/10 text-[#5b4636]' 
             : 'bg-white/80 border-black/5 text-slate-900'
-      } backdrop-blur-md`}>
+      } backdrop-blur-md`} aria-hidden={isSettingsOpen} inert={isSettingsOpen ? '' : undefined}>
         <div className="flex items-center gap-3">
           {view === 'reader' && (
             <button 
@@ -432,7 +755,7 @@ export default function App() {
             <BookOpen className="w-5 h-5 opacity-80" />
             <h1 className="font-semibold text-lg truncate max-w-[150px] sm:max-w-md flex items-baseline gap-2">
               <span>{currentBook?.title || '随身听'}</span>
-              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.42</span>}
+              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.56</span>}
             </h1>
           </div>
         </div>
@@ -465,7 +788,7 @@ export default function App() {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 pt-16 pb-32">
+      <main className="flex-1 pt-16 pb-32" aria-hidden={isSettingsOpen} inert={isSettingsOpen ? '' : undefined}>
         {view === 'library' ? (
           <Library language={language} theme={theme} onSelectBook={handleSelectBook} onImportBook={handleImportBook} />
         ) : (
@@ -490,7 +813,7 @@ export default function App() {
             : theme === 'sepia'
               ? 'bg-[#f4ecd8]/90 text-[#5b4636]'
               : 'bg-white/90 text-slate-800'
-        }`}>
+        }`} aria-hidden={isSettingsOpen} inert={isSettingsOpen ? '' : undefined}>
           <div className={`h-10 w-10 animate-spin rounded-full border-2 border-transparent ${
             theme === 'sepia' ? 'border-t-[#5b4636]' : 'border-t-indigo-500'
           }`} />
@@ -509,7 +832,7 @@ export default function App() {
               : theme === 'sepia' 
                 ? 'bg-[#f4ecd8] border-[#eaddc5] text-[#5b4636]' 
                 : 'bg-white border-slate-200 text-slate-900'
-          }`}
+          }`} aria-hidden={isSettingsOpen} inert={isSettingsOpen ? '' : undefined}
         >
           <div className="max-w-3xl mx-auto flex flex-col gap-4">
             {/* Controls Row */}
@@ -650,81 +973,6 @@ export default function App() {
                 </div>
               </form>
             </motion.div>
-          </>
-        )}
-      </AnimatePresence>
-
-      {/* Activation Modal */}
-      <AnimatePresence>
-        {isActivationModalOpen && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 0.5 }}
-              exit={{ opacity: 0 }}
-              onClick={() => setIsActivationModalOpen(false)}
-              className="fixed inset-0 bg-black z-40"
-            />
-            <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-              <motion.div
-                initial={{ opacity: 0, scale: 0.92, y: 16 }}
-                animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.92, y: 16 }}
-                className={`w-full max-w-sm p-6 rounded-2xl shadow-2xl border ${
-                  theme === 'dark'
-                    ? 'bg-slate-900 border-slate-800 text-white'
-                    : theme === 'sepia'
-                      ? 'bg-[#f4ecd8] border-[#eaddc5] text-[#5b4636]'
-                      : 'bg-white border-slate-200 text-slate-900'
-                }`}
-              >
-                <h3 className="text-lg font-bold mb-3">{t.activationTitle}</h3>
-                <p className="text-sm opacity-80 mb-4">{t.activationBody}</p>
-                <div className="space-y-4">
-                  <input
-                    type="password"
-                    value={activationInput}
-                    onChange={(e) => setActivationInput(e.target.value)}
-                    placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                    className={`w-full px-4 py-3 rounded-xl border text-sm outline-none ${
-                      theme === 'dark'
-                        ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
-                        : theme === 'sepia'
-                          ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
-                          : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
-                    }`}
-                  />
-                  <div className="flex gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setIsActivationModalOpen(false)}
-                      className={`flex-1 px-4 py-3 rounded-xl font-bold transition-colors ${
-                        theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-100 hover:bg-slate-200'
-                      }`}
-                    >
-                      {t.activationLater}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextKey = activationInput.trim();
-                        setAzureConfig((prev) => ({ ...prev, key: nextKey }));
-                        if (nextKey) {
-                          setIsActivationModalOpen(false);
-                        } else {
-                          setIsSettingsOpen(true);
-                        }
-                      }}
-                      className={`flex-1 px-4 py-3 rounded-xl font-bold transition-colors ${
-                        theme === 'sepia' ? 'bg-[#5b4636] text-[#f4ecd8] hover:bg-[#4a382a]' : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                      }`}
-                    >
-                      {t.activationCta}
-                    </button>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
           </>
         )}
       </AnimatePresence>
