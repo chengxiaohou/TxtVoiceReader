@@ -337,6 +337,39 @@ export const SettingsPanel = React.memo(({
                       <span className="opacity-80">{t.azureChinaEndpoint}</span>
                     </label>
 
+                    <label className="flex items-center gap-3 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={azureConfig.overlapEnabled}
+                        onChange={(e) => onAzureConfigChange({ ...azureConfig, overlapEnabled: e.target.checked })}
+                        className="h-4 w-4"
+                      />
+                      <span className="opacity-80">{t.azureOverlap}</span>
+                    </label>
+
+                    {azureConfig.overlapEnabled && (
+                      <div className="space-y-3">
+                        <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureOverlapLead}</label>
+                        <select
+                          value={String(azureConfig.overlapMs)}
+                          onChange={(e) => onAzureConfigChange({ ...azureConfig, overlapMs: parseInt(e.target.value, 10) || 0 })}
+                          className={`w-full px-4 py-3 rounded-xl border text-sm outline-none appearance-none cursor-pointer ${
+                            theme === 'dark'
+                              ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
+                              : theme === 'sepia'
+                                ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
+                                : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
+                          }`}
+                        >
+                          {[80, 120, 180, 240, 320].map((ms) => (
+                            <option key={ms} value={String(ms)} className={theme === 'dark' ? 'bg-slate-900 text-white' : ''}>
+                              {t.azureOverlapLeadOption.replace('{ms}', String(ms))}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+
                     {status?.message && (
                       <div className={`text-xs font-medium ${
                         status.level === 'error'

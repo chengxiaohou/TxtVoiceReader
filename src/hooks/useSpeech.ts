@@ -11,6 +11,8 @@ export interface AzureTtsConfig {
   voice: string;
   outputFormat: string;
   useChinaEndpoint: boolean;
+  overlapEnabled: boolean;
+  overlapMs: number;
 }
 
 export interface UseSpeechOptions {
@@ -63,9 +65,11 @@ export const useSpeech = (
   });
 
   const chunksRef = useRef<string[]>([]);
+  const chunkBoundaryRef = useRef<boolean[]>([]);
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const synthRef = useRef<SpeechSynthesis | null>(isSupported ? window.speechSynthesis : null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const overlapAudioRef = useRef<HTMLAudioElement | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const prefetchAbortRef = useRef<AbortController | null>(null);
   const cacheRef = useRef<Map<number, string>>(new Map());
@@ -82,6 +86,10 @@ export const useSpeech = (
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = '';
+      }
+      if (overlapAudioRef.current) {
+        overlapAudioRef.current.pause();
+        overlapAudioRef.current.src = '';
       }
     }
   }, [options.engine]);
@@ -115,6 +123,7 @@ export const useSpeech = (
   useEffect(() => {
     if (!text) {
       chunksRef.current = [];
+      chunkBoundaryRef.current = [];
       setState(prev => ({ ...prev, totalChunks: 0, currentChunkIndex: 0, progress: 0 }));
       return;
     }
@@ -122,6 +131,7 @@ export const useSpeech = (
     // Simple chunking by sentence/newline
     const rawChunks = text.match(/[^.!?\n]+[.!?\n]*/g) || [text];
     chunksRef.current = rawChunks;
+    chunkBoundaryRef.current = rawChunks.map((chunk) => /\n/.test(chunk));
     
     // Ensure initialIndex is within bounds
     const safeInitialIndex = Math.min(Math.max(0, initialIndex), rawChunks.length - 1);
@@ -231,13 +241,13 @@ export const useSpeech = (
         ? `https://${region}.tts.speech.azure.cn/cognitiveservices/v1`
         : `https://${region}.tts.speech.microsoft.com/cognitiveservices/v1`;
 
-      const findNextNonEmptyIndex = (startIndex: number) => {
-        let idx = startIndex;
-        while (idx < chunksRef.current.length && !chunksRef.current[idx].trim()) {
-          idx += 1;
-        }
-        return idx < chunksRef.current.length ? idx : -1;
-      };
+    const findNextNonEmptyIndex = (startIndex: number) => {
+      let idx = startIndex;
+      while (idx < chunksRef.current.length && !chunksRef.current[idx].trim()) {
+        idx += 1;
+      }
+      return idx < chunksRef.current.length ? idx : -1;
+    };
 
       const fetchAzureAudio = async (targetIndex: number, signal: AbortSignal) => {
         const effectiveIndex = findNextNonEmptyIndex(targetIndex);
@@ -293,53 +303,110 @@ export const useSpeech = (
           });
       };
 
+      const startAzurePlayback = (playIndex: number, playUrl: string, audioEl: HTMLAudioElement) => {
+        const playChunk = chunksRef.current[playIndex] || '';
+        audioEl.src = playUrl;
+        const startAt = performance.now();
+        console.log(`[AzureTTS] start chunk=${playIndex} t=${startAt.toFixed(1)}ms`);
+
+        let overlapStarted = false;
+        const leadMs = Math.max(0, config.overlapMs || 0);
+        const shouldOverlap = Boolean(config.overlapEnabled) && Boolean(chunkBoundaryRef.current[playIndex]);
+        const nextIndex = findNextNonEmptyIndex(playIndex + 1);
+        let overlapTimer: number | null = null;
+
+        const tryStartOverlap = async () => {
+          if (overlapStarted) return;
+          if (!shouldOverlap || nextIndex < 0) return;
+          overlapStarted = true;
+          console.log(`[AzureTTS] overlap start from chunk=${playIndex} to chunk=${nextIndex} lead=${leadMs}ms`);
+          let nextUrl = cacheRef.current.get(nextIndex) || null;
+          if (nextUrl) {
+            cacheRef.current.delete(nextIndex);
+          } else {
+            try {
+              const result = await fetchAzureAudio(nextIndex, abortRef.current?.signal || new AbortController().signal);
+              nextUrl = result ? result.url : null;
+            } catch {
+              nextUrl = null;
+            }
+          }
+          if (!nextUrl) return;
+          if (!overlapAudioRef.current) {
+            overlapAudioRef.current = new Audio();
+          }
+          setState(prev => ({
+            ...prev,
+            currentChunkIndex: nextIndex,
+            progress: nextIndex / chunksRef.current.length,
+            status: { level: 'idle', message: '' },
+          }));
+          prefetchNext(nextIndex + 1);
+          startAzurePlayback(nextIndex, nextUrl, overlapAudioRef.current);
+        };
+
+        const scheduleOverlap = () => {
+          if (!shouldOverlap || nextIndex < 0) return;
+          if (!Number.isFinite(audioEl.duration) || audioEl.duration <= 0) return;
+          const fireInMs = Math.max(0, audioEl.duration * 1000 - leadMs);
+          overlapTimer = window.setTimeout(() => {
+            tryStartOverlap();
+          }, fireInMs);
+        };
+
+        const onLoadedMetadata = () => {
+          scheduleOverlap();
+        };
+
+        audioEl.addEventListener('loadedmetadata', onLoadedMetadata, { once: true });
+
+        audioEl.onended = () => {
+          if (overlapTimer) {
+            window.clearTimeout(overlapTimer);
+            overlapTimer = null;
+          }
+          const endAt = performance.now();
+          console.log(`[AzureTTS] end chunk=${playIndex} t=${endAt.toFixed(1)}ms dur=${(endAt - startAt).toFixed(1)}ms`);
+          URL.revokeObjectURL(playUrl);
+          if (shouldOverlap && overlapStarted) {
+            return;
+          }
+          const nextDirect = playIndex + 1;
+          if (nextDirect < chunksRef.current.length) {
+            setState(prev => ({
+              ...prev,
+              currentChunkIndex: nextDirect,
+              progress: nextDirect / chunksRef.current.length,
+              status: { level: 'idle', message: '' },
+            }));
+            const cachedNext = cacheRef.current.get(nextDirect) || null;
+            if (cachedNext) {
+              cacheRef.current.delete(nextDirect);
+              prefetchNext(nextDirect + 1);
+              startAzurePlayback(nextDirect, cachedNext, audioRef.current || audioEl);
+              return;
+            }
+            prefetchNext(nextDirect + 1);
+            speakChunk(nextDirect);
+          } else {
+            setState(prev => ({ ...prev, isPlaying: false, isPaused: false, isLoading: false, progress: 1, status: { level: 'idle', message: '' } }));
+            if (onProgressUpdate) {
+              onProgressUpdate(chunksRef.current.length, chunksRef.current.length);
+            }
+          }
+        };
+
+        audioEl.play().finally(() => {
+          setState(prev => ({ ...prev, isLoading: false }));
+        });
+      };
+
       abortRef.current?.abort();
       abortRef.current = new AbortController();
 
       setState(prev => ({ ...prev, isLoading: true, status: { level: 'info', message: 'Requesting Azure TTS...' } }));
 
       try {
-        const startAzurePlayback = (playIndex: number, playUrl: string) => {
-          if (!audioRef.current) {
-            audioRef.current = new Audio();
-          }
-          const audio = audioRef.current;
-          audio.src = playUrl;
-          const startAt = performance.now();
-          console.log(`[AzureTTS] start chunk=${playIndex} t=${startAt.toFixed(1)}ms`);
-          audio.onended = () => {
-            const endAt = performance.now();
-            console.log(`[AzureTTS] end chunk=${playIndex} t=${endAt.toFixed(1)}ms dur=${(endAt - startAt).toFixed(1)}ms`);
-            URL.revokeObjectURL(playUrl);
-            const nextIndex = playIndex + 1;
-            if (nextIndex < chunksRef.current.length) {
-              setState(prev => ({
-                ...prev,
-                currentChunkIndex: nextIndex,
-                progress: nextIndex / chunksRef.current.length,
-                status: { level: 'idle', message: '' },
-              }));
-              const cachedNext = cacheRef.current.get(nextIndex) || null;
-              if (cachedNext) {
-                cacheRef.current.delete(nextIndex);
-                prefetchNext(nextIndex + 1);
-                startAzurePlayback(nextIndex, cachedNext);
-                return;
-              }
-              prefetchNext(nextIndex + 1);
-              speakChunk(nextIndex);
-            } else {
-              setState(prev => ({ ...prev, isPlaying: false, isPaused: false, isLoading: false, progress: 1, status: { level: 'idle', message: '' } }));
-              if (onProgressUpdate) {
-                onProgressUpdate(chunksRef.current.length, chunksRef.current.length);
-              }
-            }
-          };
-          audio.play().finally(() => {
-            setState(prev => ({ ...prev, isLoading: false }));
-          });
-        };
-
         let url = cacheRef.current.get(safeIndex) || null;
         if (url) {
           cacheRef.current.delete(safeIndex);
@@ -352,7 +419,10 @@ export const useSpeech = (
           return;
         }
         prefetchNext(safeIndex + 1);
-        startAzurePlayback(safeIndex, url);
+        if (!audioRef.current) {
+          audioRef.current = new Audio();
+        }
+        startAzurePlayback(safeIndex, url, audioRef.current);
       } catch (error: any) {
         if (error?.name === 'AbortError') return;
         console.error('Azure TTS error', error);
@@ -475,27 +545,41 @@ export const useSpeech = (
     setState((prev) => ({ ...prev, isPlaying: false, isPaused: false, isLoading: false }));
   }, [options.engine]);
 
-  const skipForward = useCallback(() => {
-    if (state.currentChunkIndex < chunksRef.current.length - 1) {
-      const nextIndex = state.currentChunkIndex + 1;
-      setState(prev => ({ ...prev, currentChunkIndex: nextIndex, progress: nextIndex / chunksRef.current.length }));
-      
-      if (state.isPlaying) {
-        speakChunk(nextIndex);
-      }
+  const findNextNonEmptyIndex = useCallback((startIndex: number) => {
+    let idx = startIndex;
+    while (idx < chunksRef.current.length && !chunksRef.current[idx].trim()) {
+      idx += 1;
     }
-  }, [state.currentChunkIndex, state.isPlaying, speakChunk]);
+    return idx < chunksRef.current.length ? idx : -1;
+  }, []);
+
+  const findPrevNonEmptyIndex = useCallback((startIndex: number) => {
+    let idx = startIndex;
+    while (idx >= 0 && !chunksRef.current[idx].trim()) {
+      idx -= 1;
+    }
+    return idx >= 0 ? idx : -1;
+  }, []);
+
+  const skipForward = useCallback(() => {
+    const nextIndex = findNextNonEmptyIndex(state.currentChunkIndex + 1);
+    if (nextIndex < 0) return;
+    setState(prev => ({ ...prev, currentChunkIndex: nextIndex, progress: nextIndex / chunksRef.current.length }));
+    if (state.isPlaying) {
+      stopCurrentPlayback();
+      speakChunk(nextIndex);
+    }
+  }, [state.currentChunkIndex, state.isPlaying, speakChunk, stopCurrentPlayback, findNextNonEmptyIndex]);
 
   const skipBackward = useCallback(() => {
-    if (state.currentChunkIndex > 0) {
-      const prevIndex = state.currentChunkIndex - 1;
-      setState(prev => ({ ...prev, currentChunkIndex: prevIndex, progress: prevIndex / chunksRef.current.length }));
-      
-      if (state.isPlaying) {
-        speakChunk(prevIndex);
-      }
+    const prevIndex = findPrevNonEmptyIndex(state.currentChunkIndex - 1);
+    if (prevIndex < 0) return;
+    setState(prev => ({ ...prev, currentChunkIndex: prevIndex, progress: prevIndex / chunksRef.current.length }));
+    if (state.isPlaying) {
+      stopCurrentPlayback();
+      speakChunk(prevIndex);
     }
-  }, [state.currentChunkIndex, state.isPlaying, speakChunk]);
+  }, [state.currentChunkIndex, state.isPlaying, speakChunk, stopCurrentPlayback, findPrevNonEmptyIndex]);
 
   const setRate = useCallback((rate: number) => {
     setState((prev) => ({ ...prev, rate }));

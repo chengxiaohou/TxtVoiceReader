@@ -69,6 +69,9 @@ export const translations = {
     azureFormatPcm24k: 'Studio WAV (Lossless · 24kHz)',
     azureFormatPcm16k: 'WAV (Lossless · 16kHz)',
     azureFormatRaw16k: 'Raw PCM (For processing · 16kHz)',
+    azureOverlap: 'Tighten paragraph gap (overlap)',
+    azureOverlapLead: 'Overlap Lead Time',
+    azureOverlapLeadOption: '{ms} ms earlier',
   },
   zh: {
     library: '书架',
@@ -139,5 +142,8 @@ export const translations = {
     azureFormatPcm24k: '无损录音（WAV · 24kHz）',
     azureFormatPcm16k: '无损（WAV · 16kHz）',
     azureFormatRaw16k: '原始PCM（用于处理 · 16kHz）',
+    azureOverlap: '缩短段落停顿（提前衔接）',
+    azureOverlapLead: '提前时间',
+    azureOverlapLeadOption: '提前 {ms} 毫秒',
   }
 };

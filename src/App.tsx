@@ -228,6 +228,66 @@ export default function App() {
   }, [view, currentBook, persistLastReadingBook]);
 
   useEffect(() => {
+    if (view !== 'reader') return;
+
+    const isTypingTarget = (target: EventTarget | null) => {
+      const el = target as HTMLElement | null;
+      return Boolean(
+        el &&
+          (el.tagName === 'INPUT' ||
+            el.tagName === 'TEXTAREA' ||
+            el.isContentEditable)
+      );
+    };
+
+    const shouldHandle = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target)) return false;
+      return (
+        e.code === 'Space' ||
+        e.key === ' ' ||
+        e.key === 'Spacebar' ||
+        e.key === 'ArrowLeft' ||
+        e.key === 'ArrowRight' ||
+        e.key === 'ArrowUp' ||
+        e.key === 'ArrowDown'
+      );
+    };
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!shouldHandle(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (e.code === 'Space' || e.key === ' ' || e.key === 'Spacebar') {
+        handleTogglePlayback();
+        return;
+      }
+
+      if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        skipBackward();
+        return;
+      }
+
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        skipForward();
+      }
+    };
+
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (!shouldHandle(e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+    };
+
+    document.addEventListener('keydown', onKeyDown, { capture: true });
+    document.addEventListener('keyup', onKeyUp, { capture: true });
+    return () => {
+      document.removeEventListener('keydown', onKeyDown, { capture: true } as any);
+      document.removeEventListener('keyup', onKeyUp, { capture: true } as any);
+    };
+  }, [view, handleTogglePlayback, skipBackward, skipForward]);
+
+  useEffect(() => {
     const body = document.body;
     const html = document.documentElement;
     
