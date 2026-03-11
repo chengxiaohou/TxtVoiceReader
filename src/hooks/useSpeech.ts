@@ -299,6 +299,47 @@ export const useSpeech = (
       setState(prev => ({ ...prev, isLoading: true, status: { level: 'info', message: 'Requesting Azure TTS...' } }));
 
       try {
+        const startAzurePlayback = (playIndex: number, playUrl: string) => {
+          if (!audioRef.current) {
+            audioRef.current = new Audio();
+          }
+          const audio = audioRef.current;
+          audio.src = playUrl;
+          const startAt = performance.now();
+          console.log(`[AzureTTS] start chunk=${playIndex} t=${startAt.toFixed(1)}ms`);
+          audio.onended = () => {
+            const endAt = performance.now();
+            console.log(`[AzureTTS] end chunk=${playIndex} t=${endAt.toFixed(1)}ms dur=${(endAt - startAt).toFixed(1)}ms`);
+            URL.revokeObjectURL(playUrl);
+            const nextIndex = playIndex + 1;
+            if (nextIndex < chunksRef.current.length) {
+              setState(prev => ({
+                ...prev,
+                currentChunkIndex: nextIndex,
+                progress: nextIndex / chunksRef.current.length,
+                status: { level: 'idle', message: '' },
+              }));
+              const cachedNext = cacheRef.current.get(nextIndex) || null;
+              if (cachedNext) {
+                cacheRef.current.delete(nextIndex);
+                prefetchNext(nextIndex + 1);
+                startAzurePlayback(nextIndex, cachedNext);
+                return;
+              }
+              prefetchNext(nextIndex + 1);
+              speakChunk(nextIndex);
+            } else {
+              setState(prev => ({ ...prev, isPlaying: false, isPaused: false, isLoading: false, progress: 1, status: { level: 'idle', message: '' } }));
+              if (onProgressUpdate) {
+                onProgressUpdate(chunksRef.current.length, chunksRef.current.length);
+              }
+            }
+          };
+          audio.play().finally(() => {
+            setState(prev => ({ ...prev, isLoading: false }));
+          });
+        };
+
         let url = cacheRef.current.get(safeIndex) || null;
         if (url) {
           cacheRef.current.delete(safeIndex);
@@ -310,36 +351,8 @@ export const useSpeech = (
           setState(prev => ({ ...prev, isLoading: false }));
           return;
         }
-
-        if (!audioRef.current) {
-          audioRef.current = new Audio();
-        }
-
-        const audio = audioRef.current;
-        audio.src = url;
-        audio.onended = () => {
-          URL.revokeObjectURL(url);
-          const nextIndex = safeIndex + 1;
-          if (nextIndex < chunksRef.current.length) {
-            setState(prev => ({
-              ...prev,
-              currentChunkIndex: nextIndex,
-              progress: nextIndex / chunksRef.current.length,
-              status: { level: 'idle', message: '' },
-            }));
-            prefetchNext(nextIndex + 1);
-            speakChunk(nextIndex);
-          } else {
-            setState(prev => ({ ...prev, isPlaying: false, isPaused: false, isLoading: false, progress: 1, status: { level: 'idle', message: '' } }));
-            if (onProgressUpdate) {
-              onProgressUpdate(chunksRef.current.length, chunksRef.current.length);
-            }
-          }
-        };
-
-        await audio.play();
-        setState(prev => ({ ...prev, isLoading: false }));
         prefetchNext(safeIndex + 1);
+        startAzurePlayback(safeIndex, url);
       } catch (error: any) {
         if (error?.name === 'AbortError') return;
         console.error('Azure TTS error', error);
@@ -501,11 +514,16 @@ export const useSpeech = (
       setState(prev => ({ 
         ...prev, 
         currentChunkIndex: index, 
-        progress: index / chunksRef.current.length 
+        progress: index / chunksRef.current.length,
+        isPlaying: prev.isPlaying ? prev.isPlaying : false,
+        isPaused: prev.isPaused ? false : prev.isPaused,
+        isLoading: false,
       }));
       
-      if (state.isPlaying) {
+      if (state.isPlaying || state.isPaused) {
         stopCurrentPlayback();
+      }
+      if (state.isPlaying) {
         speakChunk(index);
       }
     }
@@ -521,6 +539,17 @@ export const useSpeech = (
       cacheRef.current.clear();
     };
   }, []);
+
+  // When switching engine, stop current playback and clear play/pause state.
+  useEffect(() => {
+    stopCurrentPlayback();
+    setState((prev) => ({
+      ...prev,
+      isPlaying: false,
+      isPaused: false,
+      isLoading: false,
+    }));
+  }, [options.engine, stopCurrentPlayback]);
 
   return useMemo(() => ({
     ...state,
