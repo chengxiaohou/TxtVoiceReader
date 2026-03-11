@@ -43,8 +43,19 @@ export default function App() {
   const [isAzureConfigHydrated, setIsAzureConfigHydrated] = useState(false);
 
   const [isJumpModalOpen, setIsJumpModalOpen] = useState(false);
+  const [isActivationModalOpen, setIsActivationModalOpen] = useState(false);
+  const [activationInput, setActivationInput] = useState('');
+  const activationPromptedRef = useRef(false);
 
   const t = translations[language];
+
+  const isActivationMissing = ttsEngine === 'azure' && !azureConfig.key.trim();
+  const requireActivationCode = useCallback(() => {
+    if (!isActivationMissing) return true;
+    setIsActivationModalOpen(true);
+    activationPromptedRef.current = true;
+    return false;
+  }, [isActivationMissing]);
 
   const persistLastReadingBook = useCallback((bookId: string) => {
     if (typeof window === 'undefined') return;
@@ -163,18 +174,20 @@ export default function App() {
   }, []);
 
   const handleStartPlayback = useCallback(() => {
+    if (!requireActivationCode()) return;
     setPlayScrollSignal((prev) => prev + 1);
     speak();
-  }, [speak]);
+  }, [speak, requireActivationCode]);
 
   const handleTogglePlayback = useCallback(() => {
+    if (!requireActivationCode()) return;
     if (isPlaying) {
       pause();
       return;
     }
     setPlayScrollSignal((prev) => prev + 1);
     speak();
-  }, [isPlaying, pause, speak]);
+  }, [isPlaying, pause, speak, requireActivationCode]);
 
   const handleJump = (e: any) => {
     e.preventDefault();
@@ -348,6 +361,26 @@ export default function App() {
     }
   }, [azureConfig, ttsEngine, isAzureConfigHydrated]);
 
+  useEffect(() => {
+    if (!isAzureConfigHydrated) return;
+    if (!isActivationMissing) return;
+    if (activationPromptedRef.current) return;
+    activationPromptedRef.current = true;
+    setIsActivationModalOpen(true);
+  }, [isActivationMissing, isAzureConfigHydrated]);
+
+  useEffect(() => {
+    if (!isActivationMissing && isActivationModalOpen) {
+      setIsActivationModalOpen(false);
+    }
+  }, [isActivationMissing, isActivationModalOpen]);
+
+  useEffect(() => {
+    if (isActivationModalOpen) {
+      setActivationInput(azureConfig.key || '');
+    }
+  }, [isActivationModalOpen, azureConfig.key]);
+
   // Flush latest highlighted chunk progress when app is backgrounded/closed.
   useEffect(() => {
     if (!currentBook || totalChunks <= 0) return;
@@ -397,7 +430,7 @@ export default function App() {
             <BookOpen className="w-5 h-5 opacity-80" />
             <h1 className="font-semibold text-lg truncate max-w-[150px] sm:max-w-md flex items-baseline gap-2">
               <span>{currentBook?.title || '随身听'}</span>
-              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.35</span>}
+              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.37</span>}
             </h1>
           </div>
         </div>
@@ -619,6 +652,80 @@ export default function App() {
         )}
       </AnimatePresence>
 
+      {/* Activation Modal */}
+      <AnimatePresence>
+        {isActivationModalOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 0.5 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsActivationModalOpen(false)}
+              className="fixed inset-0 bg-black z-40"
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.92, y: 16 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.92, y: 16 }}
+              className={`fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-[90%] max-w-sm z-50 p-6 rounded-2xl shadow-2xl border ${
+                theme === 'dark'
+                  ? 'bg-slate-900 border-slate-800 text-white'
+                  : theme === 'sepia'
+                    ? 'bg-[#f4ecd8] border-[#eaddc5] text-[#5b4636]'
+                    : 'bg-white border-slate-200 text-slate-900'
+              }`}
+            >
+              <h3 className="text-lg font-bold mb-3">{t.activationTitle}</h3>
+              <p className="text-sm opacity-80 mb-4">{t.activationBody}</p>
+              <div className="space-y-4">
+                <input
+                  autoFocus
+                  type="password"
+                  value={activationInput}
+                  onChange={(e) => setActivationInput(e.target.value)}
+                  placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                  className={`w-full px-4 py-3 rounded-xl border text-sm outline-none ${
+                    theme === 'dark'
+                      ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
+                      : theme === 'sepia'
+                        ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
+                        : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
+                  }`}
+                />
+                <div className="flex gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setIsActivationModalOpen(false)}
+                    className={`flex-1 px-4 py-3 rounded-xl font-bold transition-colors ${
+                      theme === 'dark' ? 'bg-slate-800 hover:bg-slate-700' : 'bg-slate-100 hover:bg-slate-200'
+                    }`}
+                  >
+                    {t.activationLater}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextKey = activationInput.trim();
+                      setAzureConfig((prev) => ({ ...prev, key: nextKey }));
+                      if (nextKey) {
+                        setIsActivationModalOpen(false);
+                      } else {
+                        setIsSettingsOpen(true);
+                      }
+                    }}
+                    className={`flex-1 px-4 py-3 rounded-xl font-bold transition-colors ${
+                      theme === 'sepia' ? 'bg-[#5b4636] text-[#f4ecd8] hover:bg-[#4a382a]' : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                    }`}
+                  >
+                    {t.activationCta}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
       {/* Settings Panel */}
       <SettingsPanel
         isOpen={isSettingsOpen}
@@ -633,6 +740,7 @@ export default function App() {
         }}
         azureConfig={azureConfig}
         onAzureConfigChange={setAzureConfig}
+        onRequireActivationCode={requireActivationCode}
         rate={rate}
         onRateChange={setRate}
         pitch={pitch}

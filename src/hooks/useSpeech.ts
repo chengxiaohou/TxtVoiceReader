@@ -211,7 +211,7 @@ export const useSpeech = (
     if (options.engine === 'azure') {
       const config = options.azure;
       if (!config) {
-        setState(prev => ({ ...prev, status: { level: 'error', message: 'Azure TTS is not configured.' } }));
+        setState(prev => ({ ...prev, status: { level: 'error', message: 'Online TTS is not configured.' } }));
         return;
       }
 
@@ -222,12 +222,12 @@ export const useSpeech = (
       if (!region || !key || !voice) {
         const missing = [
           !region ? 'region' : null,
-          !key ? 'key' : null,
+          !key ? 'activation code' : null,
           !voice ? 'voice' : null,
         ].filter(Boolean).join(', ');
         setState(prev => ({
           ...prev,
-          status: { level: 'error', message: `Azure TTS requires region, key, and voice name. Missing: ${missing}.` }
+          status: { level: 'error', message: `Online TTS requires region, activation code, and voice name. Missing: ${missing}.` }
         }));
         return;
       }
@@ -416,7 +416,7 @@ export const useSpeech = (
       abortRef.current?.abort();
       abortRef.current = new AbortController();
 
-      setState(prev => ({ ...prev, isLoading: true, status: { level: 'info', message: 'Requesting Azure TTS...' } }));
+      setState(prev => ({ ...prev, isLoading: true, status: { level: 'info', message: 'Requesting online speech...' } }));
 
       try {
         let url = cacheRef.current.get(safeIndex) || null;
@@ -437,13 +437,13 @@ export const useSpeech = (
         startAzurePlayback(safeIndex, url, audioRef.current);
       } catch (error: any) {
         if (error?.name === 'AbortError') return;
-        console.error('Azure TTS error', error);
+        console.error('Online TTS error', error);
         setState(prev => ({
           ...prev,
           isPlaying: false,
           isPaused: false,
           isLoading: false,
-          status: { level: 'error', message: 'Azure TTS failed. Check region/key/voice.' }
+          status: { level: 'error', message: 'Online speech failed. Check region/activation code/voice.' }
         }));
       }
 

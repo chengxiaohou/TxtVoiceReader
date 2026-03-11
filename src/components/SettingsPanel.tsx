@@ -26,6 +26,7 @@ interface SettingsPanelProps {
   onThemeChange: (theme: 'light' | 'dark' | 'sepia') => void;
   language: Language;
   onLanguageChange: (lang: Language) => void;
+  onRequireActivationCode?: () => boolean;
   status?: {
     level: 'idle' | 'info' | 'error';
     message: string;
@@ -54,11 +55,21 @@ export const SettingsPanel = React.memo(({
   onThemeChange,
   language,
   onLanguageChange,
+  onRequireActivationCode,
   status,
 }: SettingsPanelProps) => {
   const t = translations[language];
   const [azureVoices, setAzureVoices] = useState<{ shortName: string; locale: string; localName?: string; gender?: string }[]>([]);
   const [azureVoiceStatus, setAzureVoiceStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const guardActivation = (event?: React.SyntheticEvent) => {
+    if (!onRequireActivationCode) return true;
+    const ok = onRequireActivationCode();
+    if (!ok && event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    return ok;
+  };
 
   const getLanguageName = (langCode: string) => {
     try {
@@ -237,6 +248,8 @@ export const SettingsPanel = React.memo(({
                   {ttsEngine === 'azure' ? (
                     <select
                       value={azureConfig.voice}
+                      onMouseDown={(event) => guardActivation(event)}
+                      onFocus={(event) => guardActivation(event)}
                       onChange={(e) => onAzureConfigChange({ ...azureConfig, voice: e.target.value })}
                       className={`w-full px-4 py-3 pr-10 border-2 rounded-2xl text-sm font-medium outline-none transition-all appearance-none cursor-pointer ${
                         theme === 'dark' 
@@ -300,6 +313,8 @@ export const SettingsPanel = React.memo(({
                   <div className="relative group">
                     <select
                       value={azureConfig.outputFormat}
+                      onMouseDown={(event) => guardActivation(event)}
+                      onFocus={(event) => guardActivation(event)}
                       onChange={(e) => onAzureConfigChange({ ...azureConfig, outputFormat: e.target.value })}
                       className={`w-full px-4 py-3 pr-10 border-2 rounded-2xl text-sm font-medium outline-none transition-all appearance-none cursor-pointer ${
                         theme === 'dark'
@@ -730,16 +745,6 @@ export const SettingsPanel = React.memo(({
                       }`}
                     />
                   </div>
-
-                  <label className="flex items-center gap-3 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={azureConfig.useChinaEndpoint}
-                      onChange={(e) => onAzureConfigChange({ ...azureConfig, useChinaEndpoint: e.target.checked })}
-                      className="h-4 w-4"
-                    />
-                    <span className="opacity-80">{t.azureChinaEndpoint}</span>
-                  </label>
 
                   {status?.message && (
                     <div className={`text-xs font-medium ${
