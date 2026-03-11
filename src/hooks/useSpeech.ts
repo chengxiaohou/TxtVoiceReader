@@ -69,6 +69,22 @@ export const useSpeech = (
   const abortRef = useRef<AbortController | null>(null);
   const prefetchAbortRef = useRef<AbortController | null>(null);
   const cacheRef = useRef<Map<number, string>>(new Map());
+
+  const stopCurrentPlayback = useCallback(() => {
+    const synth = synthRef.current;
+    if (options.engine === 'browser') {
+      if (synth) synth.cancel();
+    } else {
+      abortRef.current?.abort();
+      prefetchAbortRef.current?.abort();
+      cacheRef.current.forEach((url) => URL.revokeObjectURL(url));
+      cacheRef.current.clear();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = '';
+      }
+    }
+  }, [options.engine]);
   
   // Refs to hold latest parameters to avoid closure staleness in recursive calls
   const paramsRef = useRef({
@@ -489,10 +505,11 @@ export const useSpeech = (
       }));
       
       if (state.isPlaying) {
+        stopCurrentPlayback();
         speakChunk(index);
       }
     }
-  }, [state.isPlaying, speakChunk]);
+  }, [state.isPlaying, speakChunk, stopCurrentPlayback]);
 
   // Cleanup
   useEffect(() => {
