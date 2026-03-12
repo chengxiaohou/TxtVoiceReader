@@ -1,8 +1,9 @@
-import React, { useMemo, useEffect, useState, useRef } from 'react';
+import React, { useMemo, useEffect, useState, useRef, useCallback } from 'react';
 import { Settings, X, Volume2, Mic, Globe, ChevronLeft } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { translations, Language } from '../i18n';
 import type { AzureTtsConfig, TtsEngine } from '../hooks/useSpeech';
+import { getAudioCacheStats, clearAudioCache } from '../utils/audioCache';
 
 interface SettingsPanelProps {
   isOpen: boolean;
@@ -67,6 +68,29 @@ export const SettingsPanel = React.memo(({
   const lastFocusedRef = useRef<HTMLElement | null>(null);
   const [azureVoices, setAzureVoices] = useState<{ shortName: string; locale: string; localName?: string; gender?: string }[]>([]);
   const [azureVoiceStatus, setAzureVoiceStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [audioCacheCount, setAudioCacheCount] = useState(0);
+  const [audioCacheBytes, setAudioCacheBytes] = useState(0);
+  const [isClearingCache, setIsClearingCache] = useState(false);
+
+  const refreshAudioCacheStats = useCallback(() => {
+    getAudioCacheStats()
+      .then((stats) => {
+        setAudioCacheCount(stats.count);
+        setAudioCacheBytes(stats.totalBytes);
+      })
+      .catch(() => {
+        setAudioCacheCount(0);
+        setAudioCacheBytes(0);
+      });
+  }, []);
+
+  const formatBytes = (bytes: number) => {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '0 MB';
+    const mb = bytes / (1024 * 1024);
+    if (mb < 1) return `${(bytes / 1024).toFixed(1)} KB`;
+    if (mb < 1024) return `${mb.toFixed(1)} MB`;
+    return `${(mb / 1024).toFixed(2)} GB`;
+  };
   const guardActivation = (event?: React.SyntheticEvent) => {
     if (!onRequireActivationCode) return true;
     const ok = onRequireActivationCode();
@@ -76,6 +100,11 @@ export const SettingsPanel = React.memo(({
     }
     return ok;
   };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    refreshAudioCacheStats();
+  }, [isOpen, refreshAudioCacheStats]);
 
   const getLanguageName = (langCode: string) => {
     try {
@@ -771,6 +800,171 @@ export const SettingsPanel = React.memo(({
                       ))}
                     </div>
                   </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-end">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">
+                        {t.audioCacheLimit}
+                      </label>
+                      <span className="text-sm font-mono font-bold">
+                        {(Number.isFinite(azureConfig.cacheMaxEntries) ? azureConfig.cacheMaxEntries : 200)}{t.audioCacheLimitUnit}
+                      </span>
+                    </div>
+                    <div className="relative flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = Number.isFinite(azureConfig.cacheMaxEntries) ? azureConfig.cacheMaxEntries : 200;
+                          const nextValue = clampValue(current - 10, 0, 1000);
+                          onAzureConfigChange({ ...azureConfig, cacheMaxEntries: nextValue });
+                        }}
+                        className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                          theme === 'dark'
+                            ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                            : theme === 'sepia'
+                              ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                              : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                        aria-label={`${t.audioCacheLimit} 减小`}
+                      >
+                        -
+                      </button>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1000}
+                        step={10}
+                        value={Number.isFinite(azureConfig.cacheMaxEntries) ? azureConfig.cacheMaxEntries : 200}
+                        onChange={(e) => {
+                          const nextValue = Math.max(0, Math.min(1000, Number(e.target.value)));
+                          onAzureConfigChange({ ...azureConfig, cacheMaxEntries: Number.isFinite(nextValue) ? nextValue : 0 });
+                        }}
+                        aria-label={t.audioCacheLimit}
+                        className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
+                          theme === 'dark' 
+                            ? 'bg-slate-800 accent-indigo-500' 
+                            : theme === 'sepia' 
+                              ? 'bg-[#5b4636]/10 accent-[#5b4636]' 
+                              : 'bg-slate-200 accent-indigo-600'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = Number.isFinite(azureConfig.cacheMaxEntries) ? azureConfig.cacheMaxEntries : 200;
+                          const nextValue = clampValue(current + 10, 0, 1000);
+                          onAzureConfigChange({ ...azureConfig, cacheMaxEntries: nextValue });
+                        }}
+                        className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                          theme === 'dark'
+                            ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                            : theme === 'sepia'
+                              ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                              : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                        aria-label={`${t.audioCacheLimit} 增大`}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-end">
+                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">
+                        {t.audioCacheSizeLimit}
+                      </label>
+                      <span className="text-sm font-mono font-bold">
+                        {Math.round((Number.isFinite(azureConfig.cacheMaxBytes) ? azureConfig.cacheMaxBytes : 0) / (1024 * 1024))}{t.audioCacheSizeLimitUnit}
+                      </span>
+                    </div>
+                    <div className="relative flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = Math.round((Number.isFinite(azureConfig.cacheMaxBytes) ? azureConfig.cacheMaxBytes : 0) / (1024 * 1024));
+                          const nextMb = clampValue(current - 10, 0, 2048);
+                          onAzureConfigChange({ ...azureConfig, cacheMaxBytes: nextMb * 1024 * 1024 });
+                        }}
+                        className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                          theme === 'dark'
+                            ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                            : theme === 'sepia'
+                              ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                              : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                        aria-label={`${t.audioCacheSizeLimit} 减小`}
+                      >
+                        -
+                      </button>
+                      <input
+                        type="range"
+                        min={0}
+                        max={2048}
+                        step={10}
+                        value={Math.round((Number.isFinite(azureConfig.cacheMaxBytes) ? azureConfig.cacheMaxBytes : 0) / (1024 * 1024))}
+                        onChange={(e) => {
+                          const nextMb = Math.max(0, Math.min(2048, Number(e.target.value)));
+                          const nextBytes = Number.isFinite(nextMb) ? Math.floor(nextMb * 1024 * 1024) : 0;
+                          onAzureConfigChange({ ...azureConfig, cacheMaxBytes: nextBytes });
+                        }}
+                        aria-label={t.audioCacheSizeLimit}
+                        className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
+                          theme === 'dark' 
+                            ? 'bg-slate-800 accent-indigo-500' 
+                            : theme === 'sepia' 
+                              ? 'bg-[#5b4636]/10 accent-[#5b4636]' 
+                              : 'bg-slate-200 accent-indigo-600'
+                        }`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const current = Math.round((Number.isFinite(azureConfig.cacheMaxBytes) ? azureConfig.cacheMaxBytes : 0) / (1024 * 1024));
+                          const nextMb = clampValue(current + 10, 0, 2048);
+                          onAzureConfigChange({ ...azureConfig, cacheMaxBytes: nextMb * 1024 * 1024 });
+                        }}
+                        className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                          theme === 'dark'
+                            ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                            : theme === 'sepia'
+                              ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                              : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                        }`}
+                        aria-label={`${t.audioCacheSizeLimit} 增大`}
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="text-xs font-semibold opacity-80 space-y-1">
+                    <div>{t.audioCacheStats}</div>
+                    <div>{t.audioCacheStatsCount}：{audioCacheCount}</div>
+                    <div>{t.audioCacheStatsSize}：{formatBytes(audioCacheBytes)}</div>
+                    <div>{t.audioCacheStatsAvg}：{audioCacheCount > 0 ? formatBytes(Math.round(audioCacheBytes / audioCacheCount)) : t.audioCacheStatsAvgEmpty}</div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      setIsClearingCache(true);
+                      try {
+                        await clearAudioCache();
+                      } finally {
+                        setIsClearingCache(false);
+                        refreshAudioCacheStats();
+                      }
+                    }}
+                    className={`w-full px-4 py-3 rounded-xl font-bold transition-colors ${
+                      theme === 'sepia'
+                        ? 'bg-[#5b4636] text-[#f4ecd8] hover:bg-[#4a382a]'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                    } ${isClearingCache ? 'opacity-60 cursor-wait' : ''}`}
+                    disabled={isClearingCache}
+                  >
+                    {isClearingCache ? t.audioCacheClearing : t.audioCacheClear}
+                  </button>
 
                   <button
                     type="button"

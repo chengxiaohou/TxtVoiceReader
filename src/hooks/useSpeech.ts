@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { getCachedAudio, setCachedAudio, hashString } from '../utils/audioCache';
 
 export type Voice = SpeechSynthesisVoice;
 
@@ -13,6 +14,8 @@ export interface AzureTtsConfig {
   useChinaEndpoint: boolean;
   overlapEnabled: boolean;
   overlapMs: number;
+  cacheMaxEntries: number;
+  cacheMaxBytes: number;
 }
 
 export interface UseSpeechOptions {
@@ -281,6 +284,30 @@ export const useSpeech = (
         const effectiveIndex = findNextNonEmptyIndex(targetIndex);
         if (effectiveIndex < 0) return null;
         const currentChunk = chunksRef.current[effectiveIndex] || '';
+        const cacheMaxEntries = Number.isFinite(config.cacheMaxEntries) ? config.cacheMaxEntries : 200;
+        const cacheMaxBytes = Number.isFinite(config.cacheMaxBytes) ? config.cacheMaxBytes : 0;
+        const cacheEnabled = cacheMaxEntries > 0 || cacheMaxBytes > 0;
+        const cacheKey = cacheEnabled
+          ? `az:${hashString([
+              config.region,
+              config.voice,
+              config.outputFormat,
+              config.useChinaEndpoint ? 'cn' : 'global',
+              currentChunk,
+            ].join('|'))}:${currentChunk.length}`
+          : null;
+
+        if (cacheKey) {
+          try {
+            const cachedBuffer = await getCachedAudio(cacheKey);
+            if (cachedBuffer) {
+              const cachedBlob = new Blob([cachedBuffer], { type: 'audio/mpeg' });
+              return { url: URL.createObjectURL(cachedBlob), index: effectiveIndex };
+            }
+          } catch {
+            // ignore cache read errors
+          }
+        }
         const tokenResp = await fetch(tokenUrl, {
           method: 'POST',
           headers: {
@@ -311,6 +338,11 @@ export const useSpeech = (
         }
 
         const audioBuffer = await audioResp.arrayBuffer();
+        if (cacheKey) {
+          setCachedAudio(cacheKey, audioBuffer, cacheMaxEntries, cacheMaxBytes).catch(() => {
+            // ignore cache write errors
+          });
+        }
         const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
         return { url: URL.createObjectURL(blob), index: effectiveIndex };
       };

@@ -3,6 +3,7 @@ import { Reader } from './components/Reader';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Library } from './components/Library';
 import { useSpeech, AzureTtsConfig, TtsEngine } from './hooks/useSpeech';
+import { getCachedAudio, setCachedAudio, hashString } from './utils/audioCache';
 import { Settings, Play, Pause, Check, ChevronLeft, BookOpen, Loader2, Mic } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { addBook, updateProgress, getBook, Book } from './utils/db';
@@ -44,6 +45,8 @@ export default function App() {
     useChinaEndpoint: envUseChina || false,
     overlapEnabled: false,
     overlapMs: 0,
+    cacheMaxEntries: 200,
+    cacheMaxBytes: 200 * 1024 * 1024,
   });
   const [isAzureConfigHydrated, setIsAzureConfigHydrated] = useState(false);
 
@@ -345,6 +348,49 @@ export default function App() {
     setPreviewError('');
     setPreviewingVoiceId(voice.shortName);
     try {
+      const cacheMaxEntries = Number.isFinite(azureConfig.cacheMaxEntries) ? azureConfig.cacheMaxEntries : 200;
+      const cacheMaxBytes = Number.isFinite(azureConfig.cacheMaxBytes) ? azureConfig.cacheMaxBytes : 0;
+      const cacheEnabled = cacheMaxEntries > 0 || cacheMaxBytes > 0;
+      const sampleText = language === 'zh'
+        ? '你好，这是语音试听示例。'
+        : 'Hello, this is a voice preview sample.';
+      const cacheKey = cacheEnabled
+        ? `az:${hashString([
+            azureConfig.region,
+            voice.shortName,
+            azureConfig.outputFormat,
+            azureConfig.useChinaEndpoint ? 'cn' : 'global',
+            sampleText,
+          ].join('|'))}:${sampleText.length}`
+        : null;
+
+      if (cacheKey) {
+        const cachedBuffer = await getCachedAudio(cacheKey);
+        if (cachedBuffer) {
+          const cachedBlob = new Blob([cachedBuffer], { type: 'audio/mpeg' });
+          const cachedUrl = URL.createObjectURL(cachedBlob);
+          if (!previewAudioRef.current) {
+            previewAudioRef.current = new Audio();
+          }
+          previewAudioRef.current.src = cachedUrl;
+          previewAudioRef.current.onplaying = () => {
+            setPreviewStatus('playing');
+          };
+          previewAudioRef.current.onended = () => {
+            URL.revokeObjectURL(cachedUrl);
+            setPreviewStatus('idle');
+            setPreviewingVoiceId(null);
+          };
+          previewAudioRef.current.play().catch(() => {
+            URL.revokeObjectURL(cachedUrl);
+            setPreviewStatus('error');
+            setPreviewError(t.activationFetchError);
+            setPreviewingVoiceId(null);
+          });
+          return;
+        }
+      }
+
       const tokenResp = await fetch(tokenUrl, {
         method: 'POST',
         headers: {
@@ -356,9 +402,6 @@ export default function App() {
         throw new Error(`Token request failed: ${tokenResp.status}`);
       }
       const token = await tokenResp.text();
-      const sampleText = language === 'zh'
-        ? '你好，这是语音试听示例。'
-        : 'Hello, this is a voice preview sample.';
       const audioResp = await fetch(ttsUrl, {
         method: 'POST',
         headers: {
@@ -374,6 +417,11 @@ export default function App() {
         throw new Error(`TTS request failed: ${audioResp.status}`);
       }
       const audioBuffer = await audioResp.arrayBuffer();
+      if (cacheKey) {
+        setCachedAudio(cacheKey, audioBuffer, cacheMaxEntries, cacheMaxBytes).catch(() => {
+          // ignore cache write errors
+        });
+      }
       const blob = new Blob([audioBuffer], { type: 'audio/mpeg' });
       const url = URL.createObjectURL(blob);
       if (!previewAudioRef.current) {
@@ -401,7 +449,7 @@ export default function App() {
       setPreviewError(t.activationFetchError);
       setPreviewingVoiceId(null);
     }
-  }, [azureConfig.region, azureConfig.key, azureConfig.outputFormat, azureConfig.useChinaEndpoint, language, t.activationFetchError]);
+  }, [azureConfig.region, azureConfig.key, azureConfig.outputFormat, azureConfig.useChinaEndpoint, azureConfig.cacheMaxEntries, azureConfig.cacheMaxBytes, language, t.activationFetchError]);
 
   // Apply theme to body for overscroll colors
   useEffect(() => {
@@ -562,6 +610,8 @@ export default function App() {
             useChinaEndpoint: parsed.useChinaEndpoint ?? envUseChina ?? false,
             overlapEnabled: parsed.overlapEnabled ?? false,
             overlapMs: typeof parsed.overlapMs === 'number' ? parsed.overlapMs : 0,
+            cacheMaxEntries: typeof parsed.cacheMaxEntries === 'number' ? parsed.cacheMaxEntries : 200,
+            cacheMaxBytes: typeof parsed.cacheMaxBytes === 'number' ? parsed.cacheMaxBytes : 200 * 1024 * 1024,
           });
           if (parsed.engine === 'browser' || parsed.engine === 'azure') {
             setTtsEngine(parsed.engine);
