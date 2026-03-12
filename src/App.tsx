@@ -3,7 +3,7 @@ import { Reader } from './components/Reader';
 import { SettingsPanel } from './components/SettingsPanel';
 import { Library } from './components/Library';
 import { useSpeech, AzureTtsConfig, TtsEngine } from './hooks/useSpeech';
-import { Settings, Play, Pause, ChevronLeft, BookOpen, Loader2, Mic } from 'lucide-react';
+import { Settings, Play, Pause, Check, ChevronLeft, BookOpen, Loader2, Mic } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { addBook, updateProgress, getBook, Book } from './utils/db';
 import { translations, Language } from './i18n';
@@ -822,7 +822,7 @@ export default function App() {
                   setReturnViewAfterActivation(null);
                   setView(returnViewAfterActivation);
                 }}
-                className={`fixed bottom-6 right-6 z-40 inline-flex items-center justify-center h-11 px-5 rounded-full text-sm font-bold shadow-lg transition-all ${
+                className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-40 inline-flex items-center justify-center h-11 px-5 rounded-full text-sm font-bold shadow-lg transition-all ${
                   theme === 'sepia'
                     ? 'bg-[#5b4636] text-[#f4ecd8] hover:bg-[#4a382a]'
                     : theme === 'dark'
@@ -851,22 +851,29 @@ export default function App() {
                 </h2>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {localeVoices.map((voice) => (
-                    <div key={voice.shortName} className={`p-4 rounded-2xl border flex flex-col gap-3 ${
+                    <div key={voice.shortName} className={`p-4 rounded-2xl border flex items-center gap-3 ${
                       theme === 'dark'
                         ? 'bg-slate-900/60 border-white/5'
                         : theme === 'sepia'
                           ? 'bg-[#f6efe0] border-[#eaddc5]'
                           : 'bg-slate-50 border-slate-200'
                     }`}>
-                      <div>
-                        <div className="font-semibold">{voice.localName || voice.shortName}</div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold truncate">{voice.localName || voice.shortName}</div>
                       </div>
-                      <div className="flex gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         <button
                           type="button"
                           aria-disabled={previewStatus === 'loading'}
                           onClick={() => previewVoice(voice)}
-                          className={`min-w-[100px] h-9 px-3 rounded-lg inline-flex items-center justify-center text-xs font-semibold leading-none text-center transition-colors relative ${
+                          aria-label={
+                            previewStatus === 'loading' && previewingVoiceId === voice.shortName
+                              ? (t.loading || '加载中')
+                              : previewStatus === 'playing' && previewingVoiceId === voice.shortName
+                                ? (t.activationVoicePlaying || '播放中')
+                                : (t.activationVoicePreview || '试听')
+                          }
+                          className={`h-9 w-10 rounded-lg inline-flex items-center justify-center text-xs font-semibold leading-none text-center transition-colors relative ${
                             theme === 'sepia'
                               ? 'bg-[#5b4636]/10 text-[#5b4636]'
                               : 'bg-slate-900/60 text-slate-100 border border-white/10'
@@ -877,19 +884,20 @@ export default function App() {
                               : 'hover:bg-slate-900/80'
                           }`}
                         >
-                          <span
-                            className={`h-3 w-3 rounded-full border-2 border-transparent border-t-current absolute left-3 ${
-                              previewStatus === 'loading' && previewingVoiceId === voice.shortName
-                                ? 'animate-spin opacity-100'
-                                : 'opacity-0'
-                            }`}
-                            aria-hidden="true"
-                          />
-                          {previewStatus === 'loading' && previewingVoiceId === voice.shortName
-                            ? t.loading || '加载中'
-                            : previewStatus === 'playing' && previewingVoiceId === voice.shortName
-                              ? t.activationVoicePlaying || '播放中'
-                              : t.activationVoicePreview}
+                          {previewStatus === 'loading' && previewingVoiceId === voice.shortName ? (
+                            <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />
+                          ) : previewStatus === 'playing' && previewingVoiceId === voice.shortName ? (
+                            <Pause className="w-4 h-4" aria-hidden="true" />
+                          ) : (
+                            <Play className="w-4 h-4" aria-hidden="true" />
+                          )}
+                          <span className="sr-only">
+                            {previewStatus === 'loading' && previewingVoiceId === voice.shortName
+                              ? t.loading || '加载中'
+                              : previewStatus === 'playing' && previewingVoiceId === voice.shortName
+                                ? t.activationVoicePlaying || '播放中'
+                                : t.activationVoicePreview}
+                          </span>
                         </button>
                         <button
                           type="button"
@@ -904,7 +912,8 @@ export default function App() {
                               setReturnViewAfterActivation(null);
                             }
                           }}
-                          className={`min-w-[100px] h-9 px-3 rounded-lg inline-flex items-center justify-center text-xs font-semibold leading-none text-center transition-colors ${
+                          aria-label={t.activationVoiceUse}
+                          className={`h-9 w-10 rounded-lg inline-flex items-center justify-center text-xs font-semibold leading-none text-center transition-colors ${
                             theme === 'sepia'
                               ? 'bg-[#5b4636]/10 text-[#5b4636]'
                               : 'bg-slate-900/60 text-slate-100 border border-indigo-500/70'
@@ -913,7 +922,8 @@ export default function App() {
                             : 'hover:bg-slate-900/80'
                           }`}
                         >
-                          {t.activationVoiceUse}
+                          <Check className="w-4 h-4" aria-hidden="true" />
+                          <span className="sr-only">{t.activationVoiceUse}</span>
                         </button>
                       </div>
                     </div>
