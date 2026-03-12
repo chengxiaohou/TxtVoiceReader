@@ -651,6 +651,27 @@ export default function App() {
     </div>
   ) : null;
 
+  const clearActivationInfo = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        window.localStorage.removeItem(AZURE_TTS_CONFIG_KEY);
+        window.localStorage.removeItem(ACTIVATION_VOICE_CONFIRMED_KEY);
+        window.localStorage.removeItem(AZURE_VOICE_LIST_KEY);
+      } catch {
+        // no-op
+      }
+    }
+    setAzureConfig((prev) => ({
+      ...prev,
+      key: '',
+      enabled: true,
+    }));
+    setActivationVoices([]);
+    setActivationVoiceConfirmed(false);
+    setActivationSkipped(false);
+    setActivationStage('required');
+  }, []);
+
   if (isAzureConfigHydrated && activationStage !== 'done') {
     if (activationStage === 'required') {
       return (
@@ -1131,6 +1152,7 @@ export default function App() {
         activationVoices={activationVoices}
         azureConfig={azureConfig}
         onAzureConfigChange={setAzureConfig}
+        onClearActivation={clearActivationInfo}
         onRequireActivationCode={requireActivationCode}
         rate={rate}
         onRateChange={setRate}

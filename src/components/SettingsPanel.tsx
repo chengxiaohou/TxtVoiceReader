@@ -28,6 +28,7 @@ interface SettingsPanelProps {
   language: Language;
   onLanguageChange: (lang: Language) => void;
   onRequireActivationCode?: () => boolean;
+  onClearActivation?: () => void;
   status?: {
     level: 'idle' | 'info' | 'error';
     message: string;
@@ -58,6 +59,7 @@ export const SettingsPanel = React.memo(({
   language,
   onLanguageChange,
   onRequireActivationCode,
+  onClearActivation,
   status,
 }: SettingsPanelProps) => {
   const t = translations[language];
@@ -770,39 +772,17 @@ export const SettingsPanel = React.memo(({
                     </div>
                   </div>
 
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureRegion}</label>
-                    <input
-                      type="text"
-                      value={azureConfig.region}
-                      onChange={(e) => onAzureConfigChange({ ...azureConfig, region: e.target.value })}
-                      placeholder="eastasia"
-                      className={`w-full px-4 py-3 rounded-xl border text-sm outline-none ${
-                        theme === 'dark'
-                          ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
-                          : theme === 'sepia'
-                            ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
-                            : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
-                      }`}
-                    />
-                  </div>
-
-                  <div className="space-y-3">
-                    <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.azureKey}</label>
-                    <input
-                      type="password"
-                      value={azureConfig.key}
-                      onChange={(e) => onAzureConfigChange({ ...azureConfig, key: e.target.value })}
-                      placeholder="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                      className={`w-full px-4 py-3 rounded-xl border text-sm outline-none ${
-                        theme === 'dark'
-                          ? 'bg-slate-900 border-white/5 text-slate-200 focus:border-indigo-500'
-                          : theme === 'sepia'
-                            ? 'bg-transparent border-[#5b4636]/20 text-[#5b4636] focus:border-[#5b4636]'
-                            : 'bg-white border-slate-200 text-slate-900 focus:border-indigo-600'
-                      }`}
-                    />
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => onClearActivation?.()}
+                    className={`w-full px-4 py-3 rounded-xl font-bold transition-colors ${
+                      theme === 'sepia'
+                        ? 'bg-[#5b4636] text-[#f4ecd8] hover:bg-[#4a382a]'
+                        : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                    }`}
+                  >
+                    {t.clearActivation}
+                  </button>
 
                   {status?.message && (
                     <div className={`text-xs font-medium ${
