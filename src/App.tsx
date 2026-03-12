@@ -524,6 +524,28 @@ export default function App() {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    const preventGesture = (event: Event) => {
+      event.preventDefault();
+    };
+    const preventTouchMove = (event: TouchEvent) => {
+      if (activationStage === 'required') {
+        event.preventDefault();
+      }
+    };
+    document.addEventListener('gesturestart', preventGesture, { passive: false });
+    document.addEventListener('gesturechange', preventGesture, { passive: false });
+    document.addEventListener('gestureend', preventGesture, { passive: false });
+    document.addEventListener('touchmove', preventTouchMove, { passive: false });
+    return () => {
+      document.removeEventListener('gesturestart', preventGesture);
+      document.removeEventListener('gesturechange', preventGesture);
+      document.removeEventListener('gestureend', preventGesture);
+      document.removeEventListener('touchmove', preventTouchMove);
+    };
+  }, [activationStage]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     try {
       const raw = window.localStorage.getItem(AZURE_TTS_CONFIG_KEY);
       if (raw) {
@@ -605,6 +627,17 @@ export default function App() {
   }, [hasActivation, hasActivationVoice, activationSkipped, isAzureConfigHydrated, azureConfig.key, activationStage]);
 
   useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (activationStage === 'required') {
+      document.body.style.overflow = 'hidden';
+      document.documentElement.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+      document.documentElement.style.overflow = '';
+    }
+  }, [activationStage]);
+
+  useEffect(() => {
     if (!isAzureConfigHydrated) return;
     if (activationStage === 'required') {
       activationPageRef.current?.focus();
@@ -682,19 +715,19 @@ export default function App() {
           tabIndex={-1}
           role="main"
           aria-labelledby="activation-title"
-          className={`min-h-screen flex items-center justify-center px-6 py-12 ${
+          className={`min-h-screen flex items-center justify-center px-4 sm:px-6 py-8 sm:py-12 overflow-hidden ${
           theme === 'dark' ? 'bg-slate-950 text-slate-100' : theme === 'sepia' ? 'bg-[#f4ecd8] text-[#5b4636]' : 'bg-white text-slate-900'
         }`}
         >
           {debugActivationOverlay}
-          <div className={`w-full max-w-lg p-8 rounded-3xl border shadow-2xl ${
+          <div className={`w-full max-w-md sm:max-w-lg p-6 sm:p-8 rounded-3xl border shadow-2xl ${
             theme === 'dark'
               ? 'bg-slate-900 border-slate-800'
               : theme === 'sepia'
                 ? 'bg-[#f6efe0] border-[#eaddc5]'
                 : 'bg-white border-slate-200'
           }`}>
-            <h1 id="activation-title" className="text-2xl font-black mb-3">{t.activationTitle}</h1>
+            <h1 id="activation-title" className="text-xl sm:text-2xl font-black mb-3">{t.activationTitle}</h1>
             <p className="text-sm opacity-80 mb-6">{t.activationBody}</p>
             <form
               className="space-y-4"
@@ -781,6 +814,25 @@ export default function App() {
         {debugActivationOverlay}
         <div className="max-w-4xl mx-auto space-y-6">
           <div>
+            {returnViewAfterActivation && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActivationStage('done');
+                  setReturnViewAfterActivation(null);
+                  setView(returnViewAfterActivation);
+                }}
+                className={`fixed bottom-6 right-6 z-40 inline-flex items-center justify-center h-11 px-5 rounded-full text-sm font-bold shadow-lg transition-all ${
+                  theme === 'sepia'
+                    ? 'bg-[#5b4636] text-[#f4ecd8] hover:bg-[#4a382a]'
+                    : theme === 'dark'
+                      ? 'bg-slate-800 text-slate-100 hover:bg-slate-700 border border-white/10'
+                      : 'bg-slate-900 text-white hover:bg-slate-800'
+                }`}
+              >
+                {t.close || '关闭'}
+              </button>
+            )}
             <h1 id="activation-voice-title" className="text-2xl font-black mb-2">{t.activationVoiceTitle}</h1>
             <p className="text-sm opacity-80">{t.activationVoiceHint}</p>
             {previewStatus === 'error' && (

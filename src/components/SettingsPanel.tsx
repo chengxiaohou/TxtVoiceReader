@@ -254,12 +254,12 @@ export const SettingsPanel = React.memo(({
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className={`fixed right-0 top-0 bottom-0 w-full sm:w-[360px] shadow-2xl z-50 px-8 pt-0 pb-8 overflow-y-auto border-l backdrop-blur-xl transition-colors duration-300 ${
+            className={`fixed right-0 top-0 bottom-0 w-full sm:w-[360px] shadow-2xl z-50 px-8 pt-0 pb-8 overflow-y-auto border-l transition-colors duration-300 ${
               theme === 'dark' 
-                ? 'bg-slate-950/95 border-white/10 text-slate-100' 
+                ? 'bg-slate-950 border-white/10 text-slate-100' 
                 : theme === 'sepia' 
-                  ? 'bg-[#f4ecd8]/95 border-[#5b4636]/10 text-[#5b4636]' 
-                  : 'bg-white/95 border-black/5 text-slate-900'
+                  ? 'bg-[#f4ecd8] border-[#5b4636]/10 text-[#5b4636]' 
+                  : 'bg-white border-black/5 text-slate-900'
             }`}
             role="dialog"
             aria-modal="true"
@@ -267,12 +267,12 @@ export const SettingsPanel = React.memo(({
             tabIndex={-1}
             ref={panelRef}
           >
-            <div className={`sticky top-0 z-20 -mx-8 px-8 pt-8 pb-6 flex items-center justify-between backdrop-blur-xl shadow-sm ${
+            <div className={`sticky top-0 z-20 -mx-8 px-8 pt-8 pb-6 flex items-center justify-between shadow-sm ${
               theme === 'dark' 
-                ? 'bg-slate-950/98 border-b border-white/5' 
+                ? 'bg-slate-950 border-b border-white/5' 
                 : theme === 'sepia' 
-                  ? 'bg-[#f4ecd8]/98 border-b border-[#5b4636]/10' 
-                  : 'bg-white/98 border-b border-black/5'
+                  ? 'bg-[#f4ecd8] border-b border-[#5b4636]/10' 
+                  : 'bg-white border-b border-black/5'
             }`}>
               <div className="flex items-center gap-3">
                 <div className={`p-2 rounded-xl ${
