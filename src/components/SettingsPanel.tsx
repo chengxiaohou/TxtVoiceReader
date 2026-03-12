@@ -71,6 +71,19 @@ export const SettingsPanel = React.memo(({
   const [audioCacheCount, setAudioCacheCount] = useState(0);
   const [audioCacheBytes, setAudioCacheBytes] = useState(0);
   const [isClearingCache, setIsClearingCache] = useState(false);
+  const [rateDraft, setRateDraft] = useState(rate);
+  const [volumeDraft, setVolumeDraft] = useState(volume);
+  const [pitchDraft, setPitchDraft] = useState(pitch);
+  const [fontSizeDraft, setFontSizeDraft] = useState(fontSize);
+  const [trimStartDraft, setTrimStartDraft] = useState(Number.isFinite(azureConfig.trimStartSec) ? azureConfig.trimStartSec : 0);
+  const [trimEndDraft, setTrimEndDraft] = useState(Number.isFinite(azureConfig.trimEndSec) ? azureConfig.trimEndSec : 0);
+  const [cacheEntriesDraft, setCacheEntriesDraft] = useState(Number.isFinite(azureConfig.cacheMaxEntries) ? azureConfig.cacheMaxEntries : 200);
+  const [cacheSizeMbDraft, setCacheSizeMbDraft] = useState(Math.round((Number.isFinite(azureConfig.cacheMaxBytes) ? azureConfig.cacheMaxBytes : 0) / (1024 * 1024)));
+  const isDraggingPlaybackRef = useRef(false);
+  const isDraggingPitchRef = useRef(false);
+  const isDraggingFontRef = useRef(false);
+  const isDraggingTrimRef = useRef(false);
+  const isDraggingCacheRef = useRef(false);
 
   const refreshAudioCacheStats = useCallback(() => {
     getAudioCacheStats()
@@ -105,6 +118,77 @@ export const SettingsPanel = React.memo(({
     if (!isOpen) return;
     refreshAudioCacheStats();
   }, [isOpen, refreshAudioCacheStats]);
+
+  useEffect(() => {
+    if (isDraggingPlaybackRef.current) return;
+    setRateDraft(rate);
+    setVolumeDraft(volume);
+  }, [rate, volume]);
+
+  useEffect(() => {
+    if (isDraggingPitchRef.current) return;
+    setPitchDraft(pitch);
+  }, [pitch]);
+
+  useEffect(() => {
+    if (isDraggingFontRef.current) return;
+    setFontSizeDraft(fontSize);
+  }, [fontSize]);
+
+  useEffect(() => {
+    if (isDraggingTrimRef.current) return;
+    setTrimStartDraft(Number.isFinite(azureConfig.trimStartSec) ? azureConfig.trimStartSec : 0);
+    setTrimEndDraft(Number.isFinite(azureConfig.trimEndSec) ? azureConfig.trimEndSec : 0);
+  }, [azureConfig.trimStartSec, azureConfig.trimEndSec]);
+
+  useEffect(() => {
+    if (isDraggingCacheRef.current) return;
+    setCacheEntriesDraft(Number.isFinite(azureConfig.cacheMaxEntries) ? azureConfig.cacheMaxEntries : 200);
+    setCacheSizeMbDraft(Math.round((Number.isFinite(azureConfig.cacheMaxBytes) ? azureConfig.cacheMaxBytes : 0) / (1024 * 1024)));
+  }, [azureConfig.cacheMaxEntries, azureConfig.cacheMaxBytes]);
+
+  const commitTrim = useCallback((nextStart: number, nextEnd: number) => {
+    const safeStart = clampValue(Number(nextStart.toFixed(1)), 0, 3);
+    const safeEnd = clampValue(Number(nextEnd.toFixed(1)), 0, 3);
+    onAzureConfigChange({ ...azureConfig, trimStartSec: safeStart, trimEndSec: safeEnd });
+  }, [azureConfig, onAzureConfigChange]);
+
+  const roundToStep = (value: number, step: number) => {
+    if (!Number.isFinite(value)) return 0;
+    if (!Number.isFinite(step) || step <= 0) return value;
+    const inv = 1 / step;
+    return Math.round(value * inv) / inv;
+  };
+
+  const commitRate = useCallback((nextValue: number) => {
+    const rounded = clampValue(roundToStep(nextValue, 0.1), 0.5, 2);
+    onRateChange(rounded);
+  }, [onRateChange]);
+
+  const commitVolume = useCallback((nextValue: number) => {
+    const rounded = clampValue(roundToStep(nextValue, 0.1), 0, 1);
+    onVolumeChange(rounded);
+  }, [onVolumeChange]);
+
+  const commitPitch = useCallback((nextValue: number) => {
+    const rounded = clampValue(roundToStep(nextValue, 0.1), 0.5, 2);
+    onPitchChange(rounded);
+  }, [onPitchChange]);
+
+  const commitFontSize = useCallback((nextValue: number) => {
+    const rounded = clampValue(Math.round(nextValue), 12, 32);
+    onFontSizeChange(rounded);
+  }, [onFontSizeChange]);
+
+  const commitCacheEntries = useCallback((nextEntries: number) => {
+    const safeEntries = clampValue(Math.round(nextEntries), 0, 1000);
+    onAzureConfigChange({ ...azureConfig, cacheMaxEntries: safeEntries });
+  }, [azureConfig, onAzureConfigChange]);
+
+  const commitCacheSizeMb = useCallback((nextMb: number) => {
+    const safeMb = clampValue(Math.round(nextMb), 0, 2048);
+    onAzureConfigChange({ ...azureConfig, cacheMaxBytes: safeMb * 1024 * 1024 });
+  }, [azureConfig, onAzureConfigChange]);
 
   const getLanguageName = (langCode: string) => {
     try {
@@ -429,8 +513,8 @@ export const SettingsPanel = React.memo(({
                 </label>
                 <div className="grid grid-cols-1 gap-4">
                   {[
-                    { label: t.speed, value: `${rate}x`, val: rate, min: 0.5, max: 2, step: 0.1, onChange: onRateChange },
-                    { label: t.volume, value: `${Math.round(volume * 100)}%`, val: volume, min: 0, max: 1, step: 0.1, onChange: onVolumeChange },
+                    { label: t.speed, value: `${roundToStep(rateDraft, 0.1)}x`, val: rateDraft, min: 0.5, max: 2, step: 0.1, onChange: setRateDraft, onCommit: commitRate },
+                    { label: t.volume, value: `${Math.round(roundToStep(volumeDraft, 0.1) * 100)}%`, val: volumeDraft, min: 0, max: 1, step: 0.1, onChange: setVolumeDraft, onCommit: commitVolume },
                   ].map((control) => (
                     <div key={control.label} className="space-y-2">
                       <div className="flex justify-between items-end">
@@ -440,7 +524,11 @@ export const SettingsPanel = React.memo(({
                       <div className="relative flex items-center gap-3">
                         <button
                           type="button"
-                          onClick={() => control.onChange(clampValue(Number((control.val - control.step).toFixed(2)), control.min, control.max))}
+                          onClick={() => {
+                            const nextValue = clampValue(Number((control.val - control.step).toFixed(2)), control.min, control.max);
+                            control.onChange(nextValue);
+                            control.onCommit(nextValue);
+                          }}
                           className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
                             theme === 'dark'
                               ? 'border-white/10 text-slate-200 hover:bg-white/10'
@@ -456,9 +544,17 @@ export const SettingsPanel = React.memo(({
                           type="range"
                           min={control.min}
                           max={control.max}
-                          step={control.step}
+                          step="any"
                           value={control.val}
                           onChange={(e) => control.onChange(parseFloat(e.target.value))}
+                          onMouseDown={() => { isDraggingPlaybackRef.current = true; }}
+                          onTouchStart={() => { isDraggingPlaybackRef.current = true; }}
+                          onPointerDown={() => { isDraggingPlaybackRef.current = true; }}
+                          onMouseUp={() => { isDraggingPlaybackRef.current = false; control.onCommit(control.val); }}
+                          onTouchEnd={() => { isDraggingPlaybackRef.current = false; control.onCommit(control.val); }}
+                          onPointerUp={() => { isDraggingPlaybackRef.current = false; control.onCommit(control.val); }}
+                          onBlur={() => { isDraggingPlaybackRef.current = false; control.onCommit(control.val); }}
+                          onKeyUp={() => control.onCommit(control.val)}
                           aria-label={control.label}
                           aria-valuetext={`${control.label} ${control.value}`}
                           className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
@@ -471,7 +567,11 @@ export const SettingsPanel = React.memo(({
                         />
                         <button
                           type="button"
-                          onClick={() => control.onChange(clampValue(Number((control.val + control.step).toFixed(2)), control.min, control.max))}
+                          onClick={() => {
+                            const nextValue = clampValue(Number((control.val + control.step).toFixed(2)), control.min, control.max);
+                            control.onChange(nextValue);
+                            control.onCommit(nextValue);
+                          }}
                           className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
                             theme === 'dark'
                               ? 'border-white/10 text-slate-200 hover:bg-white/10'
@@ -491,12 +591,16 @@ export const SettingsPanel = React.memo(({
                 <div className="space-y-2">
                   <div className="flex justify-between items-end">
                     <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.pitch}</label>
-                    <span className="text-sm font-mono font-bold">{pitch}</span>
+                    <span className="text-sm font-mono font-bold">{roundToStep(pitchDraft, 0.1)}</span>
                   </div>
                   <div className="relative flex items-center gap-3">
                     <button
                       type="button"
-                      onClick={() => onPitchChange(clampValue(Number((pitch - 0.1).toFixed(2)), 0.5, 2))}
+                      onClick={() => {
+                        const nextValue = clampValue(Number((pitchDraft - 0.1).toFixed(2)), 0.5, 2);
+                        setPitchDraft(nextValue);
+                        commitPitch(nextValue);
+                      }}
                       className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
                         theme === 'dark'
                           ? 'border-white/10 text-slate-200 hover:bg-white/10'
@@ -512,11 +616,19 @@ export const SettingsPanel = React.memo(({
                       type="range"
                       min={0.5}
                       max={2}
-                      step={0.1}
-                      value={pitch}
-                      onChange={(e) => onPitchChange(parseFloat(e.target.value))}
+                      step="any"
+                      value={pitchDraft}
+                      onChange={(e) => setPitchDraft(parseFloat(e.target.value))}
+                      onMouseDown={() => { isDraggingPitchRef.current = true; }}
+                      onTouchStart={() => { isDraggingPitchRef.current = true; }}
+                      onPointerDown={() => { isDraggingPitchRef.current = true; }}
+                      onMouseUp={() => { isDraggingPitchRef.current = false; commitPitch(pitchDraft); }}
+                      onTouchEnd={() => { isDraggingPitchRef.current = false; commitPitch(pitchDraft); }}
+                      onPointerUp={() => { isDraggingPitchRef.current = false; commitPitch(pitchDraft); }}
+                      onBlur={() => { isDraggingPitchRef.current = false; commitPitch(pitchDraft); }}
+                      onKeyUp={() => commitPitch(pitchDraft)}
                       aria-label={t.pitch}
-                      aria-valuetext={`${t.pitch} ${pitch}`}
+                      aria-valuetext={`${t.pitch} ${roundToStep(pitchDraft, 0.1)}`}
                       className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
                         theme === 'dark' 
                           ? 'bg-slate-800 accent-indigo-500' 
@@ -527,7 +639,11 @@ export const SettingsPanel = React.memo(({
                     />
                     <button
                       type="button"
-                      onClick={() => onPitchChange(clampValue(Number((pitch + 0.1).toFixed(2)), 0.5, 2))}
+                      onClick={() => {
+                        const nextValue = clampValue(Number((pitchDraft + 0.1).toFixed(2)), 0.5, 2);
+                        setPitchDraft(nextValue);
+                        commitPitch(nextValue);
+                      }}
                       className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
                         theme === 'dark'
                           ? 'border-white/10 text-slate-200 hover:bg-white/10'
@@ -546,21 +662,23 @@ export const SettingsPanel = React.memo(({
                   {[
                     {
                       label: t.trimStart,
-                      value: `${(Number.isFinite(azureConfig.trimStartSec) ? azureConfig.trimStartSec : 0).toFixed(1)}s`,
-                      val: Number.isFinite(azureConfig.trimStartSec) ? azureConfig.trimStartSec : 0,
+                      value: `${Number.isFinite(trimStartDraft) ? trimStartDraft.toFixed(1) : '0.0'}s`,
+                      val: Number.isFinite(trimStartDraft) ? trimStartDraft : 0,
                       min: 0,
                       max: 3,
                       step: 0.1,
-                      onChange: (next: number) => onAzureConfigChange({ ...azureConfig, trimStartSec: clampValue(Number(next.toFixed(1)), 0, 3) }),
+                      onChange: (next: number) => setTrimStartDraft(clampValue(Number(next.toFixed(1)), 0, 3)),
+                      onCommit: (next: number) => commitTrim(next, trimEndDraft),
                     },
                     {
                       label: t.trimEnd,
-                      value: `${(Number.isFinite(azureConfig.trimEndSec) ? azureConfig.trimEndSec : 0).toFixed(1)}s`,
-                      val: Number.isFinite(azureConfig.trimEndSec) ? azureConfig.trimEndSec : 0,
+                      value: `${Number.isFinite(trimEndDraft) ? trimEndDraft.toFixed(1) : '0.0'}s`,
+                      val: Number.isFinite(trimEndDraft) ? trimEndDraft : 0,
                       min: 0,
                       max: 3,
                       step: 0.1,
-                      onChange: (next: number) => onAzureConfigChange({ ...azureConfig, trimEndSec: clampValue(Number(next.toFixed(1)), 0, 3) }),
+                      onChange: (next: number) => setTrimEndDraft(clampValue(Number(next.toFixed(1)), 0, 3)),
+                      onCommit: (next: number) => commitTrim(trimStartDraft, next),
                     },
                   ].map((control) => (
                     <div key={control.label} className="space-y-2">
@@ -571,7 +689,11 @@ export const SettingsPanel = React.memo(({
                       <div className="relative flex items-center gap-3">
                         <button
                           type="button"
-                          onClick={() => control.onChange(clampValue(Number((control.val - control.step).toFixed(1)), control.min, control.max))}
+                          onClick={() => {
+                            const nextValue = clampValue(Number((control.val - control.step).toFixed(1)), control.min, control.max);
+                            control.onChange(nextValue);
+                            control.onCommit(nextValue);
+                          }}
                           className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
                             theme === 'dark'
                               ? 'border-white/10 text-slate-200 hover:bg-white/10'
@@ -583,13 +705,21 @@ export const SettingsPanel = React.memo(({
                         >
                           -
                         </button>
-                        <input
-                          type="range"
-                          min={control.min}
-                          max={control.max}
-                          step={control.step}
-                          value={control.val}
-                          onChange={(e) => control.onChange(parseFloat(e.target.value))}
+                      <input
+                        type="range"
+                        min={control.min}
+                        max={control.max}
+                        step="any"
+                        value={control.val}
+                        onChange={(e) => control.onChange(parseFloat(e.target.value))}
+                        onMouseDown={() => { isDraggingTrimRef.current = true; }}
+                          onTouchStart={() => { isDraggingTrimRef.current = true; }}
+                          onPointerDown={() => { isDraggingTrimRef.current = true; }}
+                          onMouseUp={() => { isDraggingTrimRef.current = false; control.onCommit(control.val); }}
+                          onTouchEnd={() => { isDraggingTrimRef.current = false; control.onCommit(control.val); }}
+                          onPointerUp={() => { isDraggingTrimRef.current = false; control.onCommit(control.val); }}
+                          onBlur={() => { isDraggingTrimRef.current = false; control.onCommit(control.val); }}
+                          onKeyUp={() => control.onCommit(control.val)}
                           aria-label={control.label}
                           aria-valuetext={`${control.label} ${control.value}`}
                           className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
@@ -602,7 +732,11 @@ export const SettingsPanel = React.memo(({
                         />
                         <button
                           type="button"
-                          onClick={() => control.onChange(clampValue(Number((control.val + control.step).toFixed(1)), control.min, control.max))}
+                          onClick={() => {
+                            const nextValue = clampValue(Number((control.val + control.step).toFixed(1)), control.min, control.max);
+                            control.onChange(nextValue);
+                            control.onCommit(nextValue);
+                          }}
                           className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
                             theme === 'dark'
                               ? 'border-white/10 text-slate-200 hover:bg-white/10'
@@ -626,7 +760,7 @@ export const SettingsPanel = React.memo(({
                 <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.readingDisplay}</label>
                 <div className="grid grid-cols-1 gap-4">
                   {[
-                    { label: t.fontSize, value: `${fontSize}px`, val: fontSize, min: 12, max: 32, step: 1, onChange: onFontSizeChange }
+                    { label: t.fontSize, value: `${Math.round(fontSizeDraft)}px`, val: fontSizeDraft, min: 12, max: 32, step: 1, onChange: setFontSizeDraft, onCommit: commitFontSize }
                   ].map((control) => (
                     <div key={control.label} className="space-y-2">
                       <div className="flex justify-between items-end">
@@ -636,7 +770,11 @@ export const SettingsPanel = React.memo(({
                       <div className="relative flex items-center gap-3">
                         <button
                           type="button"
-                          onClick={() => control.onChange(clampValue(control.val - control.step, control.min, control.max))}
+                          onClick={() => {
+                            const nextValue = clampValue(control.val - control.step, control.min, control.max);
+                            control.onChange(nextValue);
+                            control.onCommit(nextValue);
+                          }}
                           className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
                             theme === 'dark'
                               ? 'border-white/10 text-slate-200 hover:bg-white/10'
@@ -652,9 +790,17 @@ export const SettingsPanel = React.memo(({
                           type="range"
                           min={control.min}
                           max={control.max}
-                          step={control.step}
+                          step="any"
                           value={control.val}
                           onChange={(e) => control.onChange(parseFloat(e.target.value))}
+                          onMouseDown={() => { isDraggingFontRef.current = true; }}
+                          onTouchStart={() => { isDraggingFontRef.current = true; }}
+                          onPointerDown={() => { isDraggingFontRef.current = true; }}
+                          onMouseUp={() => { isDraggingFontRef.current = false; control.onCommit(control.val); }}
+                          onTouchEnd={() => { isDraggingFontRef.current = false; control.onCommit(control.val); }}
+                          onPointerUp={() => { isDraggingFontRef.current = false; control.onCommit(control.val); }}
+                          onBlur={() => { isDraggingFontRef.current = false; control.onCommit(control.val); }}
+                          onKeyUp={() => control.onCommit(control.val)}
                           aria-label={control.label}
                           aria-valuetext={`${control.label} ${control.value}`}
                           className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
@@ -667,7 +813,11 @@ export const SettingsPanel = React.memo(({
                         />
                         <button
                           type="button"
-                          onClick={() => control.onChange(clampValue(control.val + control.step, control.min, control.max))}
+                          onClick={() => {
+                            const nextValue = clampValue(control.val + control.step, control.min, control.max);
+                            control.onChange(nextValue);
+                            control.onCommit(nextValue);
+                          }}
                           className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
                             theme === 'dark'
                               ? 'border-white/10 text-slate-200 hover:bg-white/10'
@@ -813,16 +963,17 @@ export const SettingsPanel = React.memo(({
                         {t.audioCacheLimit}
                       </label>
                       <span className="text-sm font-mono font-bold">
-                        {(Number.isFinite(azureConfig.cacheMaxEntries) ? azureConfig.cacheMaxEntries : 200)}{t.audioCacheLimitUnit}
+                        {(Number.isFinite(cacheEntriesDraft) ? cacheEntriesDraft : 200)}{t.audioCacheLimitUnit}
                       </span>
                     </div>
                     <div className="relative flex items-center gap-3">
                       <button
                         type="button"
                         onClick={() => {
-                          const current = Number.isFinite(azureConfig.cacheMaxEntries) ? azureConfig.cacheMaxEntries : 200;
+                          const current = Number.isFinite(cacheEntriesDraft) ? cacheEntriesDraft : 200;
                           const nextValue = clampValue(current - 10, 0, 1000);
-                          onAzureConfigChange({ ...azureConfig, cacheMaxEntries: nextValue });
+                          setCacheEntriesDraft(nextValue);
+                          commitCacheEntries(nextValue);
                         }}
                         className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
                           theme === 'dark'
@@ -839,12 +990,20 @@ export const SettingsPanel = React.memo(({
                         type="range"
                         min={0}
                         max={1000}
-                        step={10}
-                        value={Number.isFinite(azureConfig.cacheMaxEntries) ? azureConfig.cacheMaxEntries : 200}
+                        step="any"
+                        value={Number.isFinite(cacheEntriesDraft) ? cacheEntriesDraft : 200}
                         onChange={(e) => {
                           const nextValue = Math.max(0, Math.min(1000, Number(e.target.value)));
-                          onAzureConfigChange({ ...azureConfig, cacheMaxEntries: Number.isFinite(nextValue) ? nextValue : 0 });
+                          setCacheEntriesDraft(Number.isFinite(nextValue) ? nextValue : 0);
                         }}
+                        onMouseDown={() => { isDraggingCacheRef.current = true; }}
+                        onTouchStart={() => { isDraggingCacheRef.current = true; }}
+                        onPointerDown={() => { isDraggingCacheRef.current = true; }}
+                        onMouseUp={() => { isDraggingCacheRef.current = false; commitCacheEntries(cacheEntriesDraft); }}
+                        onTouchEnd={() => { isDraggingCacheRef.current = false; commitCacheEntries(cacheEntriesDraft); }}
+                        onPointerUp={() => { isDraggingCacheRef.current = false; commitCacheEntries(cacheEntriesDraft); }}
+                        onBlur={() => { isDraggingCacheRef.current = false; commitCacheEntries(cacheEntriesDraft); }}
+                        onKeyUp={() => commitCacheEntries(cacheEntriesDraft)}
                         aria-label={t.audioCacheLimit}
                         className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
                           theme === 'dark' 
@@ -857,9 +1016,10 @@ export const SettingsPanel = React.memo(({
                       <button
                         type="button"
                         onClick={() => {
-                          const current = Number.isFinite(azureConfig.cacheMaxEntries) ? azureConfig.cacheMaxEntries : 200;
+                          const current = Number.isFinite(cacheEntriesDraft) ? cacheEntriesDraft : 200;
                           const nextValue = clampValue(current + 10, 0, 1000);
-                          onAzureConfigChange({ ...azureConfig, cacheMaxEntries: nextValue });
+                          setCacheEntriesDraft(nextValue);
+                          commitCacheEntries(nextValue);
                         }}
                         className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
                           theme === 'dark'
@@ -881,16 +1041,17 @@ export const SettingsPanel = React.memo(({
                         {t.audioCacheSizeLimit}
                       </label>
                       <span className="text-sm font-mono font-bold">
-                        {Math.round((Number.isFinite(azureConfig.cacheMaxBytes) ? azureConfig.cacheMaxBytes : 0) / (1024 * 1024))}{t.audioCacheSizeLimitUnit}
+                        {(Number.isFinite(cacheSizeMbDraft) ? cacheSizeMbDraft : 0)}{t.audioCacheSizeLimitUnit}
                       </span>
                     </div>
                     <div className="relative flex items-center gap-3">
                       <button
                         type="button"
                         onClick={() => {
-                          const current = Math.round((Number.isFinite(azureConfig.cacheMaxBytes) ? azureConfig.cacheMaxBytes : 0) / (1024 * 1024));
+                          const current = Number.isFinite(cacheSizeMbDraft) ? cacheSizeMbDraft : 0;
                           const nextMb = clampValue(current - 10, 0, 2048);
-                          onAzureConfigChange({ ...azureConfig, cacheMaxBytes: nextMb * 1024 * 1024 });
+                          setCacheSizeMbDraft(nextMb);
+                          commitCacheSizeMb(nextMb);
                         }}
                         className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
                           theme === 'dark'
@@ -907,13 +1068,20 @@ export const SettingsPanel = React.memo(({
                         type="range"
                         min={0}
                         max={2048}
-                        step={10}
-                        value={Math.round((Number.isFinite(azureConfig.cacheMaxBytes) ? azureConfig.cacheMaxBytes : 0) / (1024 * 1024))}
+                        step="any"
+                        value={Number.isFinite(cacheSizeMbDraft) ? cacheSizeMbDraft : 0}
                         onChange={(e) => {
                           const nextMb = Math.max(0, Math.min(2048, Number(e.target.value)));
-                          const nextBytes = Number.isFinite(nextMb) ? Math.floor(nextMb * 1024 * 1024) : 0;
-                          onAzureConfigChange({ ...azureConfig, cacheMaxBytes: nextBytes });
+                          setCacheSizeMbDraft(Number.isFinite(nextMb) ? nextMb : 0);
                         }}
+                        onMouseDown={() => { isDraggingCacheRef.current = true; }}
+                        onTouchStart={() => { isDraggingCacheRef.current = true; }}
+                        onPointerDown={() => { isDraggingCacheRef.current = true; }}
+                        onMouseUp={() => { isDraggingCacheRef.current = false; commitCacheSizeMb(cacheSizeMbDraft); }}
+                        onTouchEnd={() => { isDraggingCacheRef.current = false; commitCacheSizeMb(cacheSizeMbDraft); }}
+                        onPointerUp={() => { isDraggingCacheRef.current = false; commitCacheSizeMb(cacheSizeMbDraft); }}
+                        onBlur={() => { isDraggingCacheRef.current = false; commitCacheSizeMb(cacheSizeMbDraft); }}
+                        onKeyUp={() => commitCacheSizeMb(cacheSizeMbDraft)}
                         aria-label={t.audioCacheSizeLimit}
                         className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
                           theme === 'dark' 
@@ -926,9 +1094,10 @@ export const SettingsPanel = React.memo(({
                       <button
                         type="button"
                         onClick={() => {
-                          const current = Math.round((Number.isFinite(azureConfig.cacheMaxBytes) ? azureConfig.cacheMaxBytes : 0) / (1024 * 1024));
+                          const current = Number.isFinite(cacheSizeMbDraft) ? cacheSizeMbDraft : 0;
                           const nextMb = clampValue(current + 10, 0, 2048);
-                          onAzureConfigChange({ ...azureConfig, cacheMaxBytes: nextMb * 1024 * 1024 });
+                          setCacheSizeMbDraft(nextMb);
+                          commitCacheSizeMb(nextMb);
                         }}
                         className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
                           theme === 'dark'
