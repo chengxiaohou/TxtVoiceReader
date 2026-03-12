@@ -279,12 +279,21 @@ export const useSpeech = (
         const cacheMaxEntries = Number.isFinite(config.cacheMaxEntries) ? config.cacheMaxEntries : 200;
         const cacheMaxBytes = Number.isFinite(config.cacheMaxBytes) ? config.cacheMaxBytes : 0;
         const cacheEnabled = cacheMaxEntries > 0 || cacheMaxBytes > 0;
+        const rate = Number.isFinite(paramsRef.current.rate) ? paramsRef.current.rate : 1;
+        const clampedRate = Math.max(0.5, Math.min(2, rate));
+        const ratePercent = Math.round(clampedRate * 100);
+        const pitch = Number.isFinite(paramsRef.current.pitch) ? paramsRef.current.pitch : 1;
+        const clampedPitch = Math.max(0.5, Math.min(2, pitch));
+        const pitchDeltaPercent = Math.round((clampedPitch - 1) * 100);
+        const pitchAttr = `${pitchDeltaPercent >= 0 ? '+' : ''}${pitchDeltaPercent}%`;
         const cacheKey = cacheEnabled
           ? `az:${hashString([
               config.region,
               config.voice,
               config.outputFormat,
               config.useChinaEndpoint ? 'cn' : 'global',
+              `rate:${ratePercent}`,
+              `pitch:${pitchAttr}`,
               currentChunk,
             ].join('|'))}:${currentChunk.length}`
           : null;
@@ -321,7 +330,7 @@ export const useSpeech = (
             'X-Microsoft-OutputFormat': config.outputFormat,
             'User-Agent': 'txt-voice-reader',
           },
-          body: `<?xml version="1.0" encoding="utf-8"?>\n<speak version="1.0" xml:lang="${voice.split('-').slice(0, 2).join('-')}">\n  <voice name="${voice}">${currentChunk.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</voice>\n</speak>`,
+          body: `<?xml version="1.0" encoding="utf-8"?>\n<speak version="1.0" xml:lang="${voice.split('-').slice(0, 2).join('-')}">\n  <voice name="${voice}"><prosody rate="${ratePercent}%" pitch="${pitchAttr}">${currentChunk.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</prosody></voice>\n</speak>`,
           signal,
         });
 
