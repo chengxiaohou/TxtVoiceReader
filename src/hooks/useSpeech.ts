@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { getCachedAudio, setCachedAudio, hashString } from '../utils/audioCache';
+import { chunkText } from '../utils/chunking';
 
 export type Voice = SpeechSynthesisVoice;
 
@@ -150,9 +151,8 @@ export const useSpeech = (
       return;
     }
 
-    // Simple chunking by sentence/newline
-    const rawChunks = text.match(/[^.!?\n]+[.!?\n]*/g) || [text];
-    chunksRef.current = rawChunks;
+    const rawChunks = chunkText(text).map((chunk) => chunk.text);
+    chunksRef.current = rawChunks.length > 0 ? rawChunks : [text];
     
     // Ensure initialIndex is within bounds
     const safeInitialIndex = Math.min(Math.max(0, initialIndex), rawChunks.length - 1);

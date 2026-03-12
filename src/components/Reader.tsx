@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useMemo, memo } from 'react';
+import { chunkText, TextChunk } from '../utils/chunking';
 
 interface ChunkProps {
   chunk: string;
@@ -13,6 +14,13 @@ interface ChunkProps {
 
 const Chunk = memo(({ chunk, index, isActive, isPreloading, isPreloaded, onClick, onActiveReady, scrollSignal }: ChunkProps) => {
   const ref = useRef<HTMLSpanElement>(null);
+  const leadingMatch = chunk.match(/^(\s+)/);
+  const trailingMatch = chunk.match(/(\s+)$/);
+  const leadingWhitespace = leadingMatch ? leadingMatch[1] : '';
+  const trailingWhitespace = trailingMatch ? trailingMatch[1] : '';
+  const startOffset = leadingWhitespace.length;
+  const endOffset = trailingWhitespace.length;
+  const visibleText = chunk.slice(startOffset, endOffset ? -endOffset : undefined);
 
   useEffect(() => {
     if (isActive && ref.current) {
@@ -24,26 +32,34 @@ const Chunk = memo(({ chunk, index, isActive, isPreloading, isPreloaded, onClick
     }
   }, [isActive, onActiveReady, scrollSignal]);
 
+  if (!visibleText) {
+    return <span>{chunk}</span>;
+  }
+
   return (
-    <span
-      ref={ref}
-      onClick={() => onClick(index)}
-      className={`
-        cursor-pointer rounded px-0.5
-        ${isActive 
-          ? 'bg-indigo-500/20 ring-1 ring-indigo-500/30' 
-          : isPreloading
-            ? 'border border-dashed border-indigo-500/30 bg-transparent'
-            : isPreloaded
-              ? 'border border-solid border-indigo-500/30 bg-transparent'
-              : 'hover:bg-black/5 dark:hover:bg-white/5'
-        }
-      `}
-      role="button"
-      aria-label={`Read from: ${chunk.substring(0, 20)}...`}
-    >
-      {chunk}
-    </span>
+    <>
+      {leadingWhitespace}
+      <span
+        ref={ref}
+        onClick={() => onClick(index)}
+        className={`
+          cursor-pointer rounded px-0.5
+          ${isActive 
+            ? 'bg-indigo-500/20 ring-1 ring-indigo-500/30' 
+            : isPreloading
+              ? 'border border-dashed border-indigo-500/30 bg-transparent'
+              : isPreloaded
+                ? 'border border-solid border-indigo-500/30 bg-transparent'
+                : 'hover:bg-black/5 dark:hover:bg-white/5'
+          }
+        `}
+        role="button"
+        aria-label={`Read from: ${visibleText.substring(0, 20)}...`}
+      >
+        {visibleText}
+      </span>
+      {trailingWhitespace}
+    </>
   );
 });
 
@@ -72,9 +88,10 @@ export const Reader: React.FC<ReaderProps> = ({
   onActiveChunkReady,
   scrollSignal,
 }) => {
-  const chunks = useMemo(() => {
+  const chunks = useMemo<TextChunk[]>(() => {
     if (!content) return [];
-    return content.match(/[^.!?\n]+[.!?\n]*/g) || [content];
+    const result = chunkText(content);
+    return result.length > 0 ? result : [{ text: content, start: 0, end: content.length }];
   }, [content]);
 
   const getThemeClasses = () => {
@@ -98,7 +115,7 @@ export const Reader: React.FC<ReaderProps> = ({
           <Chunk
             key={index}
             index={index}
-            chunk={chunk}
+            chunk={chunk.text}
             isActive={index === currentChunkIndex}
             isPreloading={index === preloadingChunkIndex}
             isPreloaded={index === preloadedChunkIndex}
