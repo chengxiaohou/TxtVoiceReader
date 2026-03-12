@@ -16,6 +16,7 @@ const LAST_READING_BOOK_KEY = 'txt-voice-reader-last-reading-book-id-v1';
 const AZURE_TTS_CONFIG_KEY = 'txt-voice-reader-azure-tts-config-v1';
 const ACTIVATION_VOICE_CONFIRMED_KEY = 'txt-voice-reader-activation-voice-confirmed-v1';
 const AZURE_VOICE_LIST_KEY = 'txt-voice-reader-azure-tts-voices-v1';
+const APP_VERSION = '1.2.0';
 
 export default function App() {
   const envRegion = (import.meta as any).env?.VITE_AZURE_REGION || '';
@@ -640,6 +641,7 @@ export default function App() {
 
   const debugActivationOverlay = import.meta.env.DEV && debugActivationEnabled ? (
     <div className="fixed bottom-3 left-3 z-50 max-w-[90vw] rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-xs text-slate-100 shadow-lg">
+      <div>version: {APP_VERSION}</div>
       <div>activationStage: {activationStage}</div>
       <div>ttsEngine: {ttsEngine}</div>
       <div>hasActivation: {String(hasActivation)}</div>
@@ -898,7 +900,7 @@ export default function App() {
             <BookOpen className="w-5 h-5 opacity-80" />
             <h1 className="font-semibold text-lg truncate max-w-[150px] sm:max-w-md flex items-baseline gap-2">
               <span>{currentBook?.title || '随身听'}</span>
-              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v1.1.67</span>}
+              {!currentBook && <span className="text-[10px] font-mono opacity-30 font-normal">v{APP_VERSION}</span>}
             </h1>
           </div>
         </div>
