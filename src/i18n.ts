@@ -151,7 +151,7 @@ export const translations = {
     activationAction: '激活',
     activationRetry: '重试激活',
     activationFetchError: '音频拉取失败，请重新输入激活码。',
-    activationLoading: '音频拉取中，请稍后',
+    activationLoading: '激活中...',
     loading: '加载中',
     activationCta: '去设置',
     activationLater: '稍后再说',

@@ -58,6 +58,11 @@ export default function App() {
   const [previewError, setPreviewError] = useState('');
   const [activationVoiceConfirmed, setActivationVoiceConfirmed] = useState(false);
   const [returnViewAfterActivation, setReturnViewAfterActivation] = useState<View | null>(null);
+  const [debugActivationEnabled] = useState(() => {
+    if (!import.meta.env.DEV || typeof window === 'undefined') return false;
+    const params = new URLSearchParams(window.location.search);
+    return params.has('debug');
+  });
   const previewAudioRef = useRef<HTMLAudioElement | null>(null);
   const previewAbortRef = useRef<AbortController | null>(null);
   const activationPageRef = useRef<HTMLDivElement | null>(null);
@@ -520,21 +525,22 @@ export default function App() {
     if (typeof window === 'undefined') return;
     try {
       const raw = window.localStorage.getItem(AZURE_TTS_CONFIG_KEY);
-      if (!raw) return;
-      const parsed = JSON.parse(raw) as AzureTtsConfig & { engine?: TtsEngine };
-      if (parsed) {
-        setAzureConfig({
-          enabled: Boolean(parsed.enabled),
-          region: parsed.region || envRegion || 'eastasia',
-          key: parsed.key || envKey || '',
-          voice: parsed.voice || envVoice || 'zh-CN-XiaoxiaoNeural',
-          outputFormat: parsed.outputFormat || envOutputFormat || 'audio-24khz-48kbitrate-mono-mp3',
-          useChinaEndpoint: parsed.useChinaEndpoint ?? envUseChina ?? false,
-          overlapEnabled: parsed.overlapEnabled ?? false,
-          overlapMs: typeof parsed.overlapMs === 'number' ? parsed.overlapMs : 0,
-        });
-        if (parsed.engine === 'browser' || parsed.engine === 'azure') {
-          setTtsEngine(parsed.engine);
+      if (raw) {
+        const parsed = JSON.parse(raw) as AzureTtsConfig & { engine?: TtsEngine };
+        if (parsed) {
+          setAzureConfig({
+            enabled: Boolean(parsed.enabled),
+            region: parsed.region || envRegion || 'eastasia',
+            key: parsed.key || envKey || '',
+            voice: parsed.voice || envVoice || 'zh-CN-XiaoxiaoNeural',
+            outputFormat: parsed.outputFormat || envOutputFormat || 'audio-24khz-48kbitrate-mono-mp3',
+            useChinaEndpoint: parsed.useChinaEndpoint ?? envUseChina ?? false,
+            overlapEnabled: parsed.overlapEnabled ?? false,
+            overlapMs: typeof parsed.overlapMs === 'number' ? parsed.overlapMs : 0,
+          });
+          if (parsed.engine === 'browser' || parsed.engine === 'azure') {
+            setTtsEngine(parsed.engine);
+          }
         }
       }
     } catch {
@@ -606,6 +612,7 @@ export default function App() {
     }
   }, [activationStage, isAzureConfigHydrated]);
 
+
   // Flush latest highlighted chunk progress when app is backgrounded/closed.
   useEffect(() => {
     if (!currentBook || totalChunks <= 0) return;
@@ -631,6 +638,19 @@ export default function App() {
     };
   }, [currentBook, currentChunkIndex, totalChunks, handleProgressUpdate]);
 
+  const debugActivationOverlay = import.meta.env.DEV && debugActivationEnabled ? (
+    <div className="fixed bottom-3 left-3 z-50 max-w-[90vw] rounded-xl border border-slate-700 bg-slate-900/90 px-3 py-2 text-xs text-slate-100 shadow-lg">
+      <div>activationStage: {activationStage}</div>
+      <div>ttsEngine: {ttsEngine}</div>
+      <div>hasActivation: {String(hasActivation)}</div>
+      <div>hasActivationVoice: {String(hasActivationVoice)}</div>
+      <div>activationSkipped: {String(activationSkipped)}</div>
+      <div>isAzureConfigHydrated: {String(isAzureConfigHydrated)}</div>
+      <div>azureKeyLength: {azureConfig.key?.length || 0}</div>
+      <div>azureVoice: {azureConfig.voice || ''}</div>
+    </div>
+  ) : null;
+
   if (isAzureConfigHydrated && activationStage !== 'done') {
     if (activationStage === 'required') {
       return (
@@ -643,6 +663,7 @@ export default function App() {
           theme === 'dark' ? 'bg-slate-950 text-slate-100' : theme === 'sepia' ? 'bg-[#f4ecd8] text-[#5b4636]' : 'bg-white text-slate-900'
         }`}
         >
+          {debugActivationOverlay}
           <div className={`w-full max-w-lg p-8 rounded-3xl border shadow-2xl ${
             theme === 'dark'
               ? 'bg-slate-900 border-slate-800'
@@ -734,6 +755,7 @@ export default function App() {
         theme === 'dark' ? 'bg-slate-950 text-slate-100' : theme === 'sepia' ? 'bg-[#f4ecd8] text-[#5b4636]' : 'bg-white text-slate-900'
       }`}
       >
+        {debugActivationOverlay}
         <div className="max-w-4xl mx-auto space-y-6">
           <div>
             <h1 id="activation-voice-title" className="text-2xl font-black mb-2">{t.activationVoiceTitle}</h1>
@@ -832,6 +854,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col">
+      {debugActivationOverlay}
       {/* Header */}
       <header className={`fixed top-0 left-0 right-0 h-16 z-30 flex items-center justify-between px-6 border-b transition-colors duration-300 ${
         theme === 'dark' 
