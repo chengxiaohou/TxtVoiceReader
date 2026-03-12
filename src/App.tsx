@@ -1020,21 +1020,6 @@ export default function App() {
         </div>
         
         <div className="flex items-center gap-2">
-          {view === 'reader' && !isPlaying && (
-            <button
-              onClick={handleStartPlayback}
-              className={`hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                theme === 'dark' 
-                  ? 'bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600/30' 
-                  : theme === 'sepia'
-                    ? 'bg-[#5b4636]/10 text-[#5b4636] hover:bg-[#5b4636]/20'
-                    : 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100'
-              }`}
-            >
-              <Play className="w-4 h-4 fill-current" />
-              <span>{t.playFromCurrent}</span>
-            </button>
-          )}
           <button
             onClick={() => setIsSettingsOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-full hover:bg-black/5 dark:hover:bg-white/10 transition-colors text-sm font-medium"
@@ -1146,7 +1131,7 @@ export default function App() {
 
               <button
                 onClick={() => setIsJumpModalOpen(true)}
-                className={`absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-2 px-4 py-2 rounded-full transition-all hover:scale-105 active:scale-95 ${
+                className={`absolute right-0 top-1/2 -translate-y-1/2 flex items-center gap-0.5 px-3 py-1.5 rounded-full transition-all hover:scale-105 active:scale-95 ${
                   theme === 'dark' 
                     ? 'bg-slate-800 text-slate-300 hover:bg-slate-700' 
                     : theme === 'sepia'
@@ -1154,7 +1139,7 @@ export default function App() {
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
-                <span className="text-xs font-medium hidden sm:inline">{t.playbackProgress}</span>
+                <span className="text-xs font-medium hidden sm:inline ml-1">{t.playbackProgress}</span>
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
                   theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'
                 }`}>
