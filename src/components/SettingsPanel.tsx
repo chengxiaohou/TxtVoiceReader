@@ -194,11 +194,6 @@ export const SettingsPanel = React.memo(({
     { value: 'raw-16khz-16bit-mono-pcm', label: t.azureFormatRaw16k },
   ];
 
-  const formatGapLabel = (value: number) => {
-    if (value === 0) return t.paragraphGapStandard;
-    if (value > 0) return t.paragraphGapEarlyOption.replace('{ms}', String(value));
-    return t.paragraphGapLateOption.replace('{ms}', String(Math.abs(value)));
-  };
 
   const groupedAzureVoices = useMemo(() => {
     const groups: Record<string, { shortName: string; locale: string; localName?: string; gender?: string }[]> = {};
@@ -547,72 +542,6 @@ export const SettingsPanel = React.memo(({
                   </div>
                 </div>
 
-                {ttsEngine === 'azure' && (
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-end">
-                      <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{t.paragraphGap}</label>
-                      <span className="text-sm font-mono font-bold">{formatGapLabel(azureConfig.overlapEnabled ? azureConfig.overlapMs : 0)}</span>
-                    </div>
-                    <div className="relative flex items-center gap-3">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const current = azureConfig.overlapEnabled ? azureConfig.overlapMs : 0;
-                          const nextValue = clampValue(current - 20, -320, 320);
-                          onAzureConfigChange({ ...azureConfig, overlapMs: nextValue, overlapEnabled: nextValue !== 0 });
-                        }}
-                        className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
-                          theme === 'dark'
-                            ? 'border-white/10 text-slate-200 hover:bg-white/10'
-                            : theme === 'sepia'
-                              ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
-                              : 'border-slate-200 text-slate-700 hover:bg-slate-100'
-                        }`}
-                        aria-label={`${t.paragraphGap} 减小，当前 ${formatGapLabel(azureConfig.overlapEnabled ? azureConfig.overlapMs : 0)}`}
-                      >
-                        -
-                      </button>
-                      <input
-                        type="range"
-                        min={-320}
-                        max={320}
-                        step={20}
-                        value={azureConfig.overlapEnabled ? azureConfig.overlapMs : 0}
-                        onChange={(e) => {
-                          const nextValue = parseInt(e.target.value, 10) || 0;
-                          onAzureConfigChange({ ...azureConfig, overlapMs: nextValue, overlapEnabled: nextValue !== 0 });
-                        }}
-                        aria-label={t.paragraphGap}
-                        aria-valuetext={`${t.paragraphGap} ${formatGapLabel(azureConfig.overlapEnabled ? azureConfig.overlapMs : 0)}`}
-                        className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
-                          theme === 'dark' 
-                            ? 'bg-slate-800 accent-indigo-500' 
-                            : theme === 'sepia' 
-                              ? 'bg-[#5b4636]/10 accent-[#5b4636]' 
-                              : 'bg-slate-200 accent-indigo-600'
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const current = azureConfig.overlapEnabled ? azureConfig.overlapMs : 0;
-                          const nextValue = clampValue(current + 20, -320, 320);
-                          onAzureConfigChange({ ...azureConfig, overlapMs: nextValue, overlapEnabled: nextValue !== 0 });
-                        }}
-                        className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
-                          theme === 'dark'
-                            ? 'border-white/10 text-slate-200 hover:bg-white/10'
-                            : theme === 'sepia'
-                              ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
-                              : 'border-slate-200 text-slate-700 hover:bg-slate-100'
-                        }`}
-                        aria-label={`${t.paragraphGap} 增大，当前 ${formatGapLabel(azureConfig.overlapEnabled ? azureConfig.overlapMs : 0)}`}
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
 
               {/* Reading Display */}

@@ -43,8 +43,6 @@ export default function App() {
     voice: envVoice || 'zh-CN-XiaoxiaoNeural',
     outputFormat: envOutputFormat || 'audio-24khz-48kbitrate-mono-mp3',
     useChinaEndpoint: envUseChina || false,
-    overlapEnabled: false,
-    overlapMs: 0,
     cacheMaxEntries: 200,
     cacheMaxBytes: 200 * 1024 * 1024,
   });
@@ -608,8 +606,6 @@ export default function App() {
             voice: parsed.voice || envVoice || 'zh-CN-XiaoxiaoNeural',
             outputFormat: parsed.outputFormat || envOutputFormat || 'audio-24khz-48kbitrate-mono-mp3',
             useChinaEndpoint: parsed.useChinaEndpoint ?? envUseChina ?? false,
-            overlapEnabled: parsed.overlapEnabled ?? false,
-            overlapMs: typeof parsed.overlapMs === 'number' ? parsed.overlapMs : 0,
             cacheMaxEntries: typeof parsed.cacheMaxEntries === 'number' ? parsed.cacheMaxEntries : 200,
             cacheMaxBytes: typeof parsed.cacheMaxBytes === 'number' ? parsed.cacheMaxBytes : 200 * 1024 * 1024,
           });
