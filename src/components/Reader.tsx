@@ -43,14 +43,14 @@ const Chunk = memo(({ chunk, index, isActive, isPreloading, isPreloaded, onClick
         ref={ref}
         onClick={() => onClick(index)}
         className={`
-          cursor-pointer rounded px-0.5
+          cursor-pointer rounded px-0.5 transition-none
           ${isActive 
             ? 'bg-indigo-500/20 ring-1 ring-indigo-500/30' 
             : isPreloading
               ? 'border border-dashed border-indigo-500/30 bg-transparent'
               : isPreloaded
-                ? 'border border-solid border-indigo-500/30 bg-transparent'
-                : 'hover:bg-black/5 dark:hover:bg-white/5'
+                ? 'bg-black/5 dark:bg-white/5 border border-solid border-transparent hover:border-indigo-500/30'
+                : 'border border-solid border-transparent hover:border-indigo-500/30'
           }
         `}
         role="button"
