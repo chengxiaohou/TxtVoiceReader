@@ -47,6 +47,7 @@ export default function App() {
     cacheMaxBytes: 200 * 1024 * 1024,
     trimStartSec: 0,
     trimEndSec: 0,
+    preloadCount: 2,
   });
   const [isAzureConfigHydrated, setIsAzureConfigHydrated] = useState(false);
 
@@ -612,6 +613,7 @@ export default function App() {
             cacheMaxBytes: typeof parsed.cacheMaxBytes === 'number' ? parsed.cacheMaxBytes : 200 * 1024 * 1024,
             trimStartSec: typeof parsed.trimStartSec === 'number' ? parsed.trimStartSec : 0,
             trimEndSec: typeof parsed.trimEndSec === 'number' ? parsed.trimEndSec : 0,
+            preloadCount: typeof parsed.preloadCount === 'number' ? parsed.preloadCount : 2,
           });
           if (parsed.engine === 'browser' || parsed.engine === 'azure') {
             setTtsEngine(parsed.engine);

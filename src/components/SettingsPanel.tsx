@@ -79,11 +79,13 @@ export const SettingsPanel = React.memo(({
   const [trimEndDraft, setTrimEndDraft] = useState(Number.isFinite(azureConfig.trimEndSec) ? azureConfig.trimEndSec : 0);
   const [cacheEntriesDraft, setCacheEntriesDraft] = useState(Number.isFinite(azureConfig.cacheMaxEntries) ? azureConfig.cacheMaxEntries : 200);
   const [cacheSizeMbDraft, setCacheSizeMbDraft] = useState(Math.round((Number.isFinite(azureConfig.cacheMaxBytes) ? azureConfig.cacheMaxBytes : 0) / (1024 * 1024)));
+  const [preloadCountDraft, setPreloadCountDraft] = useState(Number.isFinite(azureConfig.preloadCount) ? azureConfig.preloadCount : 2);
   const isDraggingPlaybackRef = useRef(false);
   const isDraggingPitchRef = useRef(false);
   const isDraggingFontRef = useRef(false);
   const isDraggingTrimRef = useRef(false);
   const isDraggingCacheRef = useRef(false);
+  const isDraggingPreloadRef = useRef(false);
 
   const refreshAudioCacheStats = useCallback(() => {
     getAudioCacheStats()
@@ -147,6 +149,11 @@ export const SettingsPanel = React.memo(({
     setCacheSizeMbDraft(Math.round((Number.isFinite(azureConfig.cacheMaxBytes) ? azureConfig.cacheMaxBytes : 0) / (1024 * 1024)));
   }, [azureConfig.cacheMaxEntries, azureConfig.cacheMaxBytes]);
 
+  useEffect(() => {
+    if (isDraggingPreloadRef.current) return;
+    setPreloadCountDraft(Number.isFinite(azureConfig.preloadCount) ? azureConfig.preloadCount : 2);
+  }, [azureConfig.preloadCount]);
+
   const commitTrim = useCallback((nextStart: number, nextEnd: number) => {
     const safeStart = clampValue(Number(nextStart.toFixed(1)), 0, 3);
     const safeEnd = clampValue(Number(nextEnd.toFixed(1)), 0, 3);
@@ -188,6 +195,11 @@ export const SettingsPanel = React.memo(({
   const commitCacheSizeMb = useCallback((nextMb: number) => {
     const safeMb = clampValue(Math.round(nextMb), 0, 2048);
     onAzureConfigChange({ ...azureConfig, cacheMaxBytes: safeMb * 1024 * 1024 });
+  }, [azureConfig, onAzureConfigChange]);
+
+  const commitPreloadCount = useCallback((nextValue: number) => {
+    const safeValue = clampValue(Math.round(nextValue), 1, 5);
+    onAzureConfigChange({ ...azureConfig, preloadCount: safeValue });
   }, [azureConfig, onAzureConfigChange]);
 
   const getLanguageName = (langCode: string) => {
@@ -680,6 +692,18 @@ export const SettingsPanel = React.memo(({
                       onChange: (next: number) => setTrimEndDraft(clampValue(Number(next.toFixed(1)), 0, 3)),
                       onCommit: (next: number) => commitTrim(trimStartDraft, next),
                     },
+                    ...(ttsEngine === 'azure'
+                      ? [{
+                      label: t.preloadCount,
+                      value: `${Math.round(preloadCountDraft)}段`,
+                      val: Number.isFinite(preloadCountDraft) ? preloadCountDraft : 2,
+                      min: 1,
+                      max: 5,
+                      step: 1,
+                      onChange: (next: number) => setPreloadCountDraft(next),
+                      onCommit: (next: number) => commitPreloadCount(next),
+                    }]
+                      : []),
                   ].map((control) => (
                     <div key={control.label} className="space-y-2">
                       <div className="flex justify-between items-end">
@@ -705,20 +729,20 @@ export const SettingsPanel = React.memo(({
                         >
                           -
                         </button>
-                      <input
-                        type="range"
-                        min={control.min}
-                        max={control.max}
-                        step="any"
-                        value={control.val}
-                        onChange={(e) => control.onChange(parseFloat(e.target.value))}
-                        onMouseDown={() => { isDraggingTrimRef.current = true; }}
-                          onTouchStart={() => { isDraggingTrimRef.current = true; }}
-                          onPointerDown={() => { isDraggingTrimRef.current = true; }}
-                          onMouseUp={() => { isDraggingTrimRef.current = false; control.onCommit(control.val); }}
-                          onTouchEnd={() => { isDraggingTrimRef.current = false; control.onCommit(control.val); }}
-                          onPointerUp={() => { isDraggingTrimRef.current = false; control.onCommit(control.val); }}
-                          onBlur={() => { isDraggingTrimRef.current = false; control.onCommit(control.val); }}
+                        <input
+                          type="range"
+                          min={control.min}
+                          max={control.max}
+                          step="any"
+                          value={control.val}
+                          onChange={(e) => control.onChange(parseFloat(e.target.value))}
+                          onMouseDown={() => { isDraggingTrimRef.current = true; isDraggingPreloadRef.current = true; }}
+                          onTouchStart={() => { isDraggingTrimRef.current = true; isDraggingPreloadRef.current = true; }}
+                          onPointerDown={() => { isDraggingTrimRef.current = true; isDraggingPreloadRef.current = true; }}
+                          onMouseUp={() => { isDraggingTrimRef.current = false; isDraggingPreloadRef.current = false; control.onCommit(control.val); }}
+                          onTouchEnd={() => { isDraggingTrimRef.current = false; isDraggingPreloadRef.current = false; control.onCommit(control.val); }}
+                          onPointerUp={() => { isDraggingTrimRef.current = false; isDraggingPreloadRef.current = false; control.onCommit(control.val); }}
+                          onBlur={() => { isDraggingTrimRef.current = false; isDraggingPreloadRef.current = false; control.onCommit(control.val); }}
                           onKeyUp={() => control.onCommit(control.val)}
                           aria-label={control.label}
                           aria-valuetext={`${control.label} ${control.value}`}

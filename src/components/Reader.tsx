@@ -70,8 +70,8 @@ interface ReaderProps {
   fontSize: number;
   theme: 'light' | 'dark' | 'sepia';
   currentChunkIndex: number;
-  preloadingChunkIndex?: number | null;
-  preloadedChunkIndex?: number | null;
+  preloadingChunkIndex?: number[];
+  preloadedChunkIndex?: number[];
   onChunkClick?: (index: number) => void;
   onActiveChunkReady?: () => void;
   scrollSignal?: number;
@@ -117,8 +117,8 @@ export const Reader: React.FC<ReaderProps> = ({
             index={index}
             chunk={chunk.text}
             isActive={index === currentChunkIndex}
-            isPreloading={index === preloadingChunkIndex}
-            isPreloaded={index === preloadedChunkIndex}
+            isPreloading={Boolean(preloadingChunkIndex?.includes(index))}
+            isPreloaded={Boolean(preloadedChunkIndex?.includes(index))}
             onClick={onChunkClick || (() => {})}
             onActiveReady={onActiveChunkReady}
             scrollSignal={scrollSignal}

@@ -17,6 +17,7 @@ export interface AzureTtsConfig {
   cacheMaxBytes: number;
   trimStartSec: number;
   trimEndSec: number;
+  preloadCount: number;
 }
 
 export interface UseSpeechOptions {
@@ -28,8 +29,8 @@ export interface SpeechState {
   isPlaying: boolean;
   isPaused: boolean;
   isLoading: boolean;
-  preloadingChunkIndex: number | null;
-  preloadedChunkIndex: number | null;
+  preloadingChunkIndex: number[];
+  preloadedChunkIndex: number[];
   voices: Voice[];
   selectedVoice: Voice | null;
   rate: number;
@@ -59,8 +60,8 @@ export const useSpeech = (
     isPlaying: false,
     isPaused: false,
     isLoading: false,
-    preloadingChunkIndex: null,
-    preloadedChunkIndex: null,
+    preloadingChunkIndex: [],
+    preloadedChunkIndex: [],
     voices: [],
     selectedVoice: null,
     rate: 1,
@@ -79,6 +80,7 @@ export const useSpeech = (
   const abortRef = useRef<AbortController | null>(null);
   const prefetchAbortRef = useRef<AbortController | null>(null);
   const cacheRef = useRef<Map<number, string>>(new Map());
+  const prefetchNextNRef = useRef<(startIndex: number) => void>(() => {});
 
   const stopCurrentPlayback = useCallback(() => {
     const synth = synthRef.current;
@@ -96,8 +98,8 @@ export const useSpeech = (
     }
     setState(prev => ({
       ...prev,
-      preloadingChunkIndex: null,
-      preloadedChunkIndex: null,
+      preloadingChunkIndex: [],
+      preloadedChunkIndex: [],
     }));
   }, [options.engine]);
   
@@ -127,11 +129,13 @@ export const useSpeech = (
   }, [state.currentChunkIndex, onProgressUpdate]);
 
   useEffect(() => {
-    if (state.preloadingChunkIndex === state.currentChunkIndex || state.preloadedChunkIndex === state.currentChunkIndex) {
+    const nextPreloading = state.preloadingChunkIndex.filter(idx => idx !== state.currentChunkIndex);
+    const nextPreloaded = state.preloadedChunkIndex.filter(idx => idx !== state.currentChunkIndex);
+    if (nextPreloading.length !== state.preloadingChunkIndex.length || nextPreloaded.length !== state.preloadedChunkIndex.length) {
       setState(prev => ({
         ...prev,
-        preloadingChunkIndex: prev.preloadingChunkIndex === prev.currentChunkIndex ? null : prev.preloadingChunkIndex,
-        preloadedChunkIndex: prev.preloadedChunkIndex === prev.currentChunkIndex ? null : prev.preloadedChunkIndex,
+        preloadingChunkIndex: nextPreloading,
+        preloadedChunkIndex: nextPreloaded,
       }));
     }
   }, [state.currentChunkIndex, state.preloadingChunkIndex, state.preloadedChunkIndex]);
@@ -145,8 +149,8 @@ export const useSpeech = (
         totalChunks: 0, 
         currentChunkIndex: 0, 
         progress: 0,
-        preloadingChunkIndex: null,
-        preloadedChunkIndex: null,
+        preloadingChunkIndex: [],
+        preloadedChunkIndex: [],
       }));
       return;
     }
@@ -162,8 +166,8 @@ export const useSpeech = (
       totalChunks: rawChunks.length, 
       currentChunkIndex: safeInitialIndex, 
       progress: safeInitialIndex / rawChunks.length,
-      preloadingChunkIndex: null,
-      preloadedChunkIndex: null,
+      preloadingChunkIndex: [],
+      preloadedChunkIndex: [],
     }));
   }, [text, initialIndex]);
 
@@ -352,38 +356,116 @@ export const useSpeech = (
         const effectiveIndex = findNextNonEmptyIndex(nextIndex);
         if (effectiveIndex < 0) return;
         if (cacheRef.current.has(effectiveIndex)) {
-          setState(prev => ({
-            ...prev,
-            preloadingChunkIndex: null,
-            preloadedChunkIndex: effectiveIndex,
-          }));
+          setState(prev => {
+            const preloaded = new Set(prev.preloadedChunkIndex);
+            preloaded.add(effectiveIndex);
+            return {
+              ...prev,
+              preloadingChunkIndex: prev.preloadingChunkIndex.filter(idx => idx !== effectiveIndex),
+              preloadedChunkIndex: Array.from(preloaded),
+            };
+          });
           return;
         }
         prefetchAbortRef.current?.abort();
         prefetchAbortRef.current = new AbortController();
-        setState(prev => ({
-          ...prev,
-          preloadingChunkIndex: effectiveIndex,
-          preloadedChunkIndex: prev.preloadedChunkIndex === effectiveIndex ? prev.preloadedChunkIndex : null,
-        }));
+        setState(prev => {
+          const preloading = new Set(prev.preloadingChunkIndex);
+          preloading.add(effectiveIndex);
+          return {
+            ...prev,
+            preloadingChunkIndex: Array.from(preloading),
+            preloadedChunkIndex: prev.preloadedChunkIndex.filter(idx => idx !== effectiveIndex),
+          };
+        });
         fetchAzureAudio(effectiveIndex, prefetchAbortRef.current.signal)
           .then((result) => {
             if (!result) return;
             cacheRef.current.set(result.index, result.url);
-            setState(prev => ({
-              ...prev,
-              preloadingChunkIndex: prev.preloadingChunkIndex === result.index ? null : prev.preloadingChunkIndex,
-              preloadedChunkIndex: result.index,
-            }));
+            setState(prev => {
+              const preloaded = new Set(prev.preloadedChunkIndex);
+              preloaded.add(result.index);
+              return {
+                ...prev,
+                preloadingChunkIndex: prev.preloadingChunkIndex.filter(idx => idx !== result.index),
+                preloadedChunkIndex: Array.from(preloaded),
+              };
+            });
           })
           .catch(() => {
             setState(prev => ({
               ...prev,
-              preloadingChunkIndex: prev.preloadingChunkIndex === effectiveIndex ? null : prev.preloadingChunkIndex,
+              preloadingChunkIndex: prev.preloadingChunkIndex.filter(idx => idx !== effectiveIndex),
             }));
             // ignore prefetch errors
           });
       };
+
+      const prefetchNextN = (startIndex: number) => {
+        const countRaw = Number.isFinite(config.preloadCount) ? config.preloadCount : 1;
+        const count = Math.max(1, Math.min(5, Math.floor(countRaw)));
+        const firstIndex = findNextNonEmptyIndex(startIndex);
+        if (firstIndex < 0) return;
+        prefetchAbortRef.current?.abort();
+        prefetchAbortRef.current = new AbortController();
+        setState(prev => {
+          const preloading = new Set(prev.preloadingChunkIndex);
+          preloading.add(firstIndex);
+          return {
+            ...prev,
+            preloadingChunkIndex: Array.from(preloading),
+            preloadedChunkIndex: prev.preloadedChunkIndex.filter(idx => idx !== firstIndex),
+          };
+        });
+        const { signal } = prefetchAbortRef.current;
+        const run = async () => {
+          let idx = startIndex;
+          for (let i = 0; i < count; i += 1) {
+            const effectiveIndex = findNextNonEmptyIndex(idx);
+            if (effectiveIndex < 0) break;
+            if (cacheRef.current.has(effectiveIndex)) {
+              setState(prev => {
+                const preloaded = new Set(prev.preloadedChunkIndex);
+                preloaded.add(effectiveIndex);
+                return {
+                  ...prev,
+                  preloadingChunkIndex: prev.preloadingChunkIndex.filter(idx => idx !== effectiveIndex),
+                  preloadedChunkIndex: Array.from(preloaded),
+                };
+              });
+            } else {
+              setState(prev => {
+                const preloading = new Set(prev.preloadingChunkIndex);
+                preloading.add(effectiveIndex);
+                return {
+                  ...prev,
+                  preloadingChunkIndex: Array.from(preloading),
+                };
+              });
+              const result = await fetchAzureAudio(effectiveIndex, signal);
+              if (!result) break;
+              cacheRef.current.set(result.index, result.url);
+              setState(prev => {
+                const preloaded = new Set(prev.preloadedChunkIndex);
+                preloaded.add(result.index);
+                return {
+                  ...prev,
+                  preloadingChunkIndex: prev.preloadingChunkIndex.filter(idx => idx !== result.index),
+                  preloadedChunkIndex: Array.from(preloaded),
+                };
+              });
+            }
+            idx = effectiveIndex + 1;
+          }
+        };
+        run().catch(() => {
+          setState(prev => ({
+            ...prev,
+            preloadingChunkIndex: prev.preloadingChunkIndex.filter(idx => idx !== firstIndex),
+          }));
+        });
+      };
+      prefetchNextNRef.current = prefetchNextN;
 
       const startAzurePlayback = (playIndex: number, playUrl: string, audioEl: HTMLAudioElement) => {
         const playChunk = chunksRef.current[playIndex] || '';
@@ -419,11 +501,15 @@ export const useSpeech = (
               const cachedNext = cacheRef.current.get(nextIndex) || null;
               if (cachedNext) {
                 cacheRef.current.delete(nextIndex);
-                prefetchNext(nextIndex + 1);
+                setState(prev => ({
+                  ...prev,
+                  preloadedChunkIndex: prev.preloadedChunkIndex.filter(idx => idx !== nextIndex),
+                }));
+                prefetchNextN(nextIndex + 1);
                 startAzurePlayback(nextIndex, cachedNext, audioRef.current || audioEl);
                 return;
               }
-              prefetchNext(nextIndex + 1);
+              prefetchNextN(nextIndex + 1);
               speakChunk(nextIndex);
             };
 
@@ -498,7 +584,7 @@ export const useSpeech = (
           setState(prev => ({ ...prev, isLoading: false }));
           return;
         }
-        prefetchNext(safeIndex + 1);
+        prefetchNextN(safeIndex + 1);
         if (!audioRef.current) {
           audioRef.current = new Audio();
         }
@@ -556,6 +642,14 @@ export const useSpeech = (
 
     synth.speak(utterance);
   }, [onProgressUpdate, options.engine, options.azure]);
+
+  useEffect(() => {
+    if (options.engine !== 'azure') return;
+    if (!state.isPlaying || state.isPaused) return;
+    const countRaw = options.azure?.preloadCount;
+    if (!Number.isFinite(countRaw)) return;
+    prefetchNextNRef.current(state.currentChunkIndex + 1);
+  }, [options.engine, options.azure?.preloadCount, state.isPlaying, state.isPaused, state.currentChunkIndex]);
 
   // Debounced restart when parameters change
   useEffect(() => {
