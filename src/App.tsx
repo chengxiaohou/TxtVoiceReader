@@ -1106,7 +1106,7 @@ export default function App() {
               >
                 <span className="text-xs font-medium hidden sm:inline">{t.playbackProgress}</span>
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                  theme === 'dark' ? 'bg-indigo-500/20 text-indigo-400' : 'bg-indigo-600 text-white'
+                  theme === 'dark' ? 'text-indigo-400' : 'text-indigo-600'
                 }`}>
                   {(progress * 100).toFixed(1)}%
                 </span>
