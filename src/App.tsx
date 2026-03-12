@@ -134,6 +134,8 @@ export default function App() {
     setVolume,
     progress,
     currentChunkIndex,
+    preloadingChunkIndex,
+    preloadedChunkIndex,
     totalChunks,
     jumpTo,
     status,
@@ -1005,6 +1007,8 @@ export default function App() {
               fontSize={fontSize} 
               theme={theme} 
               currentChunkIndex={currentChunkIndex}
+              preloadingChunkIndex={preloadingChunkIndex}
+              preloadedChunkIndex={preloadedChunkIndex}
               onChunkClick={jumpTo}
               onActiveChunkReady={handleReaderReady}
               scrollSignal={playScrollSignal}

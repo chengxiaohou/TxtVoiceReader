@@ -4,12 +4,14 @@ interface ChunkProps {
   chunk: string;
   index: number;
   isActive: boolean;
+  isPreloading: boolean;
+  isPreloaded: boolean;
   onClick: (index: number) => void;
   onActiveReady?: () => void;
   scrollSignal?: number;
 }
 
-const Chunk = memo(({ chunk, index, isActive, onClick, onActiveReady, scrollSignal }: ChunkProps) => {
+const Chunk = memo(({ chunk, index, isActive, isPreloading, isPreloaded, onClick, onActiveReady, scrollSignal }: ChunkProps) => {
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
@@ -30,7 +32,11 @@ const Chunk = memo(({ chunk, index, isActive, onClick, onActiveReady, scrollSign
         cursor-pointer rounded px-0.5
         ${isActive 
           ? 'bg-indigo-500/20 ring-1 ring-indigo-500/30' 
-          : 'hover:bg-black/5 dark:hover:bg-white/5'
+          : isPreloading
+            ? 'border border-dashed border-slate-400/50'
+            : isPreloaded
+              ? 'bg-slate-400/10'
+              : 'hover:bg-black/5 dark:hover:bg-white/5'
         }
       `}
       role="button"
@@ -48,6 +54,8 @@ interface ReaderProps {
   fontSize: number;
   theme: 'light' | 'dark' | 'sepia';
   currentChunkIndex: number;
+  preloadingChunkIndex?: number | null;
+  preloadedChunkIndex?: number | null;
   onChunkClick?: (index: number) => void;
   onActiveChunkReady?: () => void;
   scrollSignal?: number;
@@ -58,6 +66,8 @@ export const Reader: React.FC<ReaderProps> = ({
   fontSize, 
   theme, 
   currentChunkIndex,
+  preloadingChunkIndex,
+  preloadedChunkIndex,
   onChunkClick,
   onActiveChunkReady,
   scrollSignal,
@@ -90,6 +100,8 @@ export const Reader: React.FC<ReaderProps> = ({
             index={index}
             chunk={chunk}
             isActive={index === currentChunkIndex}
+            isPreloading={index === preloadingChunkIndex}
+            isPreloaded={index === preloadedChunkIndex}
             onClick={onChunkClick || (() => {})}
             onActiveReady={onActiveChunkReady}
             scrollSignal={scrollSignal}

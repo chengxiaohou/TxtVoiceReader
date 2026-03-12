@@ -24,6 +24,8 @@ export interface SpeechState {
   isPlaying: boolean;
   isPaused: boolean;
   isLoading: boolean;
+  preloadingChunkIndex: number | null;
+  preloadedChunkIndex: number | null;
   voices: Voice[];
   selectedVoice: Voice | null;
   rate: number;
@@ -53,6 +55,8 @@ export const useSpeech = (
     isPlaying: false,
     isPaused: false,
     isLoading: false,
+    preloadingChunkIndex: null,
+    preloadedChunkIndex: null,
     voices: [],
     selectedVoice: null,
     rate: 1,
@@ -92,6 +96,11 @@ export const useSpeech = (
         overlapAudioRef.current.src = '';
       }
     }
+    setState(prev => ({
+      ...prev,
+      preloadingChunkIndex: null,
+      preloadedChunkIndex: null,
+    }));
   }, [options.engine]);
   
   // Refs to hold latest parameters to avoid closure staleness in recursive calls
@@ -119,12 +128,29 @@ export const useSpeech = (
     }
   }, [state.currentChunkIndex, onProgressUpdate]);
 
+  useEffect(() => {
+    if (state.preloadingChunkIndex === state.currentChunkIndex || state.preloadedChunkIndex === state.currentChunkIndex) {
+      setState(prev => ({
+        ...prev,
+        preloadingChunkIndex: prev.preloadingChunkIndex === prev.currentChunkIndex ? null : prev.preloadingChunkIndex,
+        preloadedChunkIndex: prev.preloadedChunkIndex === prev.currentChunkIndex ? null : prev.preloadedChunkIndex,
+      }));
+    }
+  }, [state.currentChunkIndex, state.preloadingChunkIndex, state.preloadedChunkIndex]);
+
   // Split text into chunks when text changes
   useEffect(() => {
     if (!text) {
       chunksRef.current = [];
       chunkBoundaryRef.current = [];
-      setState(prev => ({ ...prev, totalChunks: 0, currentChunkIndex: 0, progress: 0 }));
+      setState(prev => ({ 
+        ...prev, 
+        totalChunks: 0, 
+        currentChunkIndex: 0, 
+        progress: 0,
+        preloadingChunkIndex: null,
+        preloadedChunkIndex: null,
+      }));
       return;
     }
 
@@ -140,7 +166,9 @@ export const useSpeech = (
       ...prev, 
       totalChunks: rawChunks.length, 
       currentChunkIndex: safeInitialIndex, 
-      progress: safeInitialIndex / rawChunks.length 
+      progress: safeInitialIndex / rawChunks.length,
+      preloadingChunkIndex: null,
+      preloadedChunkIndex: null,
     }));
   }, [text, initialIndex]);
 
@@ -290,15 +318,36 @@ export const useSpeech = (
       const prefetchNext = (nextIndex: number) => {
         const effectiveIndex = findNextNonEmptyIndex(nextIndex);
         if (effectiveIndex < 0) return;
-        if (cacheRef.current.has(effectiveIndex)) return;
+        if (cacheRef.current.has(effectiveIndex)) {
+          setState(prev => ({
+            ...prev,
+            preloadingChunkIndex: null,
+            preloadedChunkIndex: effectiveIndex,
+          }));
+          return;
+        }
         prefetchAbortRef.current?.abort();
         prefetchAbortRef.current = new AbortController();
+        setState(prev => ({
+          ...prev,
+          preloadingChunkIndex: effectiveIndex,
+          preloadedChunkIndex: prev.preloadedChunkIndex === effectiveIndex ? prev.preloadedChunkIndex : null,
+        }));
         fetchAzureAudio(effectiveIndex, prefetchAbortRef.current.signal)
           .then((result) => {
             if (!result) return;
             cacheRef.current.set(result.index, result.url);
+            setState(prev => ({
+              ...prev,
+              preloadingChunkIndex: prev.preloadingChunkIndex === result.index ? null : prev.preloadingChunkIndex,
+              preloadedChunkIndex: result.index,
+            }));
           })
           .catch(() => {
+            setState(prev => ({
+              ...prev,
+              preloadingChunkIndex: prev.preloadingChunkIndex === effectiveIndex ? null : prev.preloadingChunkIndex,
+            }));
             // ignore prefetch errors
           });
       };
