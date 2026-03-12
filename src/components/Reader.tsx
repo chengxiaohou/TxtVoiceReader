@@ -33,9 +33,9 @@ const Chunk = memo(({ chunk, index, isActive, isPreloading, isPreloaded, onClick
         ${isActive 
           ? 'bg-indigo-500/20 ring-1 ring-indigo-500/30' 
           : isPreloading
-            ? 'border border-dashed border-slate-400/50'
+            ? 'border border-dashed border-indigo-500/30 bg-transparent'
             : isPreloaded
-              ? 'bg-slate-400/10'
+              ? 'border border-solid border-indigo-500/30 bg-transparent'
               : 'hover:bg-black/5 dark:hover:bg-white/5'
         }
       `}
