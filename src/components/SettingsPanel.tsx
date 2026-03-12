@@ -542,6 +542,83 @@ export const SettingsPanel = React.memo(({
                   </div>
                 </div>
 
+                <div className="grid grid-cols-1 gap-4">
+                  {[
+                    {
+                      label: t.trimStart,
+                      value: `${(Number.isFinite(azureConfig.trimStartSec) ? azureConfig.trimStartSec : 0).toFixed(1)}s`,
+                      val: Number.isFinite(azureConfig.trimStartSec) ? azureConfig.trimStartSec : 0,
+                      min: 0,
+                      max: 3,
+                      step: 0.1,
+                      onChange: (next: number) => onAzureConfigChange({ ...azureConfig, trimStartSec: clampValue(Number(next.toFixed(1)), 0, 3) }),
+                    },
+                    {
+                      label: t.trimEnd,
+                      value: `${(Number.isFinite(azureConfig.trimEndSec) ? azureConfig.trimEndSec : 0).toFixed(1)}s`,
+                      val: Number.isFinite(azureConfig.trimEndSec) ? azureConfig.trimEndSec : 0,
+                      min: 0,
+                      max: 3,
+                      step: 0.1,
+                      onChange: (next: number) => onAzureConfigChange({ ...azureConfig, trimEndSec: clampValue(Number(next.toFixed(1)), 0, 3) }),
+                    },
+                  ].map((control) => (
+                    <div key={control.label} className="space-y-2">
+                      <div className="flex justify-between items-end">
+                        <label className="text-[10px] font-black uppercase tracking-[0.2em] opacity-50">{control.label}</label>
+                        <span className="text-sm font-mono font-bold">{control.value}</span>
+                      </div>
+                      <div className="relative flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => control.onChange(clampValue(Number((control.val - control.step).toFixed(1)), control.min, control.max))}
+                          className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                            theme === 'dark'
+                              ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                              : theme === 'sepia'
+                                ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                                : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                          }`}
+                          aria-label={`${control.label} 减小，当前 ${control.value}`}
+                        >
+                          -
+                        </button>
+                        <input
+                          type="range"
+                          min={control.min}
+                          max={control.max}
+                          step={control.step}
+                          value={control.val}
+                          onChange={(e) => control.onChange(parseFloat(e.target.value))}
+                          aria-label={control.label}
+                          aria-valuetext={`${control.label} ${control.value}`}
+                          className={`w-full h-1.5 rounded-full appearance-none cursor-pointer transition-all ${
+                            theme === 'dark'
+                              ? 'bg-slate-800 accent-indigo-500'
+                              : theme === 'sepia'
+                                ? 'bg-[#5b4636]/10 accent-[#5b4636]'
+                                : 'bg-slate-200 accent-indigo-600'
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => control.onChange(clampValue(Number((control.val + control.step).toFixed(1)), control.min, control.max))}
+                          className={`h-8 w-8 rounded-full border text-sm font-bold transition-colors ${
+                            theme === 'dark'
+                              ? 'border-white/10 text-slate-200 hover:bg-white/10'
+                              : theme === 'sepia'
+                                ? 'border-[#5b4636]/20 text-[#5b4636] hover:bg-[#5b4636]/10'
+                                : 'border-slate-200 text-slate-700 hover:bg-slate-100'
+                          }`}
+                          aria-label={`${control.label} 增大，当前 ${control.value}`}
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
               </div>
 
               {/* Reading Display */}

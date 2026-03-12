@@ -14,6 +14,8 @@ export interface AzureTtsConfig {
   useChinaEndpoint: boolean;
   cacheMaxEntries: number;
   cacheMaxBytes: number;
+  trimStartSec: number;
+  trimEndSec: number;
 }
 
 export interface UseSpeechOptions {
@@ -383,7 +385,17 @@ export const useSpeech = (
 
         const nextIndex = findNextNonEmptyIndex(playIndex + 1);
 
-        audioEl.onended = () => {
+        const trimStartSec = Number.isFinite(config.trimStartSec) ? Math.max(0, Math.min(3, config.trimStartSec)) : 0;
+        const trimEndSec = Number.isFinite(config.trimEndSec) ? Math.max(0, Math.min(3, config.trimEndSec)) : 0;
+        let finished = false;
+
+        const finalizeChunk = () => {
+          if (finished) return;
+          finished = true;
+          audioEl.onended = null;
+          audioEl.ontimeupdate = null;
+          audioEl.onloadedmetadata = null;
+          audioEl.oncanplay = null;
           const endAt = performance.now();
           console.log(`[AzureTTS] end chunk=${playIndex} t=${endAt.toFixed(1)}ms dur=${(endAt - startAt).toFixed(1)}ms`);
           URL.revokeObjectURL(playUrl);
@@ -415,6 +427,46 @@ export const useSpeech = (
             onProgressUpdate(chunksRef.current.length, chunksRef.current.length);
           }
         };
+
+        const applyTrim = () => {
+          const duration = audioEl.duration;
+          if (!Number.isFinite(duration) || duration <= 0) {
+            if (trimStartSec > 0) {
+              try {
+                audioEl.currentTime = trimStartSec;
+              } catch {
+                // ignore seek errors
+              }
+            }
+            return;
+          }
+          const startTime = Math.min(Math.max(trimStartSec, 0), Math.max(0, duration - 0.01));
+          const endTime = Math.max(0, duration - trimEndSec);
+          if (endTime <= startTime + 0.02) {
+            audioEl.pause();
+            finalizeChunk();
+            return;
+          }
+          if (startTime > 0) {
+            try {
+              audioEl.currentTime = startTime;
+            } catch {
+              // ignore seek errors
+            }
+          }
+          if (trimEndSec > 0) {
+            audioEl.ontimeupdate = () => {
+              if (audioEl.currentTime >= endTime) {
+                audioEl.pause();
+                finalizeChunk();
+              }
+            };
+          }
+        };
+
+        audioEl.onloadedmetadata = applyTrim;
+        audioEl.oncanplay = applyTrim;
+        audioEl.onended = () => finalizeChunk();
 
         audioEl.play().finally(() => {
           setState(prev => ({ ...prev, isLoading: false }));
