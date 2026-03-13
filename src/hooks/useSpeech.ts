@@ -285,7 +285,9 @@ export const useSpeech = (
         const cacheEnabled = cacheMaxEntries > 0 || cacheMaxBytes > 0;
         const rate = Number.isFinite(paramsRef.current.rate) ? paramsRef.current.rate : 1;
         const clampedRate = Math.max(0.5, Math.min(2, rate));
-        const ratePercent = Math.round(clampedRate * 100);
+        const rateAttr = Number.isFinite(clampedRate)
+          ? String(Number(clampedRate.toFixed(2)))
+          : '1.0';
         const pitch = Number.isFinite(paramsRef.current.pitch) ? paramsRef.current.pitch : 1;
         const clampedPitch = Math.max(0.5, Math.min(2, pitch));
         const pitchDeltaPercent = Math.round((clampedPitch - 1) * 100);
@@ -296,7 +298,7 @@ export const useSpeech = (
               config.voice,
               config.outputFormat,
               config.useChinaEndpoint ? 'cn' : 'global',
-              `rate:${ratePercent}`,
+              `rate:${rateAttr}`,
               `pitch:${pitchAttr}`,
               currentChunk,
             ].join('|'))}:${currentChunk.length}`
@@ -334,7 +336,7 @@ export const useSpeech = (
             'X-Microsoft-OutputFormat': config.outputFormat,
             'User-Agent': 'txt-voice-reader',
           },
-          body: `<?xml version="1.0" encoding="utf-8"?>\n<speak version="1.0" xml:lang="${voice.split('-').slice(0, 2).join('-')}">\n  <voice name="${voice}"><prosody rate="${ratePercent}%" pitch="${pitchAttr}">${currentChunk.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</prosody></voice>\n</speak>`,
+          body: `<?xml version="1.0" encoding="utf-8"?>\n<speak version="1.0" xml:lang="${voice.split('-').slice(0, 2).join('-')}">\n  <voice name="${voice}"><prosody rate="${rateAttr}" pitch="${pitchAttr}">${currentChunk.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</prosody></voice>\n</speak>`,
           signal,
         });
 
